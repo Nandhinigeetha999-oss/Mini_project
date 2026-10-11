@@ -1,8 +1,10 @@
 "use strict";
 
-/* Road records are loaded from the Java API; reports and teams remain demo data. */
+/* Roads and reports are loaded from the Java API; maintenance teams remain demo data. */
 
 const ROAD_API_URL = "http://127.0.0.1:8080/api/roads";
+const ROUTE_API_URL = "http://127.0.0.1:8080/api/routes";
+const REPORT_API_URL = "http://127.0.0.1:8080/api/reports";
 
 const users = {
     ward: {
@@ -27,9 +29,10 @@ const users = {
 
 let selectedRole = "ward";
 let currentUser = null;
-let nextReportNumber = 4;
 let roads = [];
+const reports = [];
 let roadLoadError = "";
+let reportLoadError = "";
 
 const defaultTeams = [
     {
@@ -88,42 +91,6 @@ function saveTeams() {
         return false;
     }
 }
-
-const reports = [
-    {
-        id: "DR001",
-        roadId: "R2",
-        damage: "Pothole",
-        severity: "High",
-        risk: "High",
-        importance: "High",
-        traffic: 1,
-        status: "Pending",
-        assignedTeam: "T1"
-    },
-    {
-        id: "DR002",
-        roadId: "R3",
-        damage: "Road Crack",
-        severity: "Medium",
-        risk: "Medium",
-        importance: "Medium",
-        traffic: 2,
-        status: "Pending",
-        assignedTeam: "T1"
-    },
-    {
-        id: "DR003",
-        roadId: "R5",
-        damage: "Surface Damage",
-        severity: "Low",
-        risk: "Low",
-        importance: "Low",
-        traffic: 3,
-        status: "Completed",
-        assignedTeam: "T1"
-    }
-];
 
 let locations = {};
 
@@ -276,6 +243,7 @@ function startApplication() {
     showPage("dashboard");
     renderEverything();
     loadRoads();
+    loadReports();
 }
 
 /* ---------------------------------
@@ -341,7 +309,7 @@ function showPage(pageName) {
     getElement("pageTitle").textContent = pageTitles[pageName];
 
     if (pageName === "roads") loadRoads();
-    if (pageName === "reports") renderReports();
+    if (pageName === "reports") loadReports();
     if (pageName === "teams") renderTeams();
     if (pageName === "jobs") renderJobs();
 }
@@ -521,6 +489,48 @@ getElement("refreshRoadsButton").addEventListener("click", function () {
     loadRoads();
 });
 
+getElement("roadForm").addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    if (currentUser?.role !== "engineering") {
+        return;
+    }
+
+    const form = event.currentTarget;
+    const submitButton = form.querySelector("button[type=submit]");
+    const message = getElement("roadFormMessage");
+    submitButton.disabled = true;
+    message.textContent = "Saving road to the database...";
+    message.classList.remove("error");
+
+    try {
+        const response = await fetch(ROAD_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+            body: new URLSearchParams({
+                id: getElement("newRoadId").value.trim(),
+                from: getElement("newRoadStart").value.trim(),
+                to: getElement("newRoadEnd").value.trim(),
+                time: getElement("newRoadTime").value
+            })
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(payload.error || `Road API returned HTTP ${response.status}.`);
+        }
+
+        form.reset();
+        await loadRoads();
+        message.textContent = `${payload.id} added to the road database.`;
+    } catch (error) {
+        message.textContent = `Could not add road: ${error.message}`;
+        message.classList.add("error");
+    } finally {
+        submitButton.disabled = false;
+    }
+});
+
 async function updateRoadClosure(road) {
     const status = getElement("roadConnectionStatus");
     const closed = !road.closed;
@@ -602,7 +612,9 @@ function renderReports() {
 
     if (sortedReports.length === 0) {
         getElement("reportsTable").innerHTML =
-            `<tr><td colspan="7">No reports submitted yet.</td></tr>`;
+            `<tr><td colspan="8">${reportLoadError
+                ? "Saved reports are unavailable. Check the database connection."
+                : "No reports submitted yet."}</td></tr>`;
     } else {
         getElement("reportsTable").innerHTML = sortedReports.map(function (report) {
             let action = "View only";
@@ -635,6 +647,9 @@ function renderReports() {
                     <td>${statusBadge(report.severity)}</td>
                     <td>${statusBadge(report.risk)}</td>
                     <td>${statusBadge(report.status)}</td>
+                    <td>${report.submittedAt
+                        ? escapeHTML(new Date(report.submittedAt).toLocaleString())
+                        : "—"}</td>
                     <td>${action}</td>
                 </tr>
             `;
@@ -663,7 +678,35 @@ function renderReports() {
     );
 }
 
-/* Engineering changes a report's demo status. */
+async function saveReportStatus(report, status) {
+    const message = getElement("reportStatusMessage");
+    message.textContent = `Saving ${report.id} status...`;
+    message.classList.remove("error");
+
+    try {
+        const response = await fetch(
+            `${REPORT_API_URL}/${encodeURIComponent(report.id)}/status?status=${encodeURIComponent(status)}`,
+            { method: "PATCH" }
+        );
+        const payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(payload.error || `Report API returned HTTP ${response.status}.`);
+        }
+
+        const index = reports.findIndex(item => item.id === report.id);
+        if (index !== -1) {
+            reports[index] = mapReport(payload);
+        }
+        message.textContent = `${report.id} status saved.`;
+        renderEverything();
+    } catch (error) {
+        message.textContent = `Could not save report status: ${error.message}`;
+        message.classList.add("error");
+        renderReports();
+    }
+}
+
 getElement("reportsTable").addEventListener("change", function (event) {
     const reportId = event.target.dataset.reportStatus;
 
@@ -679,44 +722,52 @@ getElement("reportsTable").addEventListener("change", function (event) {
         return;
     }
 
-    report.status = event.target.value;
-
-    renderEverything();
-    renderReports();
+    event.target.disabled = true;
+    saveReportStatus(report, event.target.value);
 });
 
-/* Ward Officer submits a new demo report. */
-getElement("reportForm").addEventListener("submit", function (event) {
+getElement("reportForm").addEventListener("submit", async function (event) {
     event.preventDefault();
 
     if (currentUser?.role !== "ward") {
         return;
     }
 
-    const newReport = {
-        id: "DR" + String(nextReportNumber).padStart(3, "0"),
-        roadId: getElement("reportRoad").value,
-        damage: getElement("damageType").value,
-        severity: getElement("severity").value,
-        risk: getElement("accidentRisk").value,
-        importance: getElement("roadImportance").value,
-        traffic: Number(getElement("trafficRank").value),
-        status: "Pending",
-        assignedTeam: "T1"
-    };
+    const form = event.currentTarget;
+    const submitButton = form.querySelector("button[type=submit]");
+    const message = getElement("reportFormMessage");
+    submitButton.disabled = true;
+    message.textContent = "Saving report to the database...";
 
-    nextReportNumber++;
-    reports.push(newReport);
+    try {
+        const response = await fetch(REPORT_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+            body: new URLSearchParams({
+                roadId: getElement("reportRoad").value,
+                damageType: getElement("damageType").value,
+                severity: getElement("severity").value,
+                risk: getElement("accidentRisk").value,
+                importance: getElement("roadImportance").value,
+                traffic: getElement("trafficRank").value
+            })
+        });
+        const payload = await response.json();
 
-    event.target.reset();
+        if (!response.ok) {
+            throw new Error(payload.error || `Report API returned HTTP ${response.status}.`);
+        }
 
-    renderEverything();
-    renderReports();
-
-    alert(
-        "Demo report submitted successfully. " +
-        "This report is not saved in your Java backend or database."
-    );
+        reports.push(mapReport(payload));
+        form.reset();
+        reportLoadError = "";
+        message.textContent = `${payload.id} saved to the municipal database.`;
+        renderEverything();
+    } catch (error) {
+        message.textContent = `Could not save report: ${error.message}`;
+    } finally {
+        submitButton.disabled = false;
+    }
 });
 
 /* ---------------------------------
@@ -896,7 +947,7 @@ function renderJobs() {
             action = `
                 <button class="secondary"
                     data-complete-report="${escapeHTML(report.id)}">
-                    Mark completed (demo)
+                    Mark completed
                 </button>
             `;
         }
@@ -926,9 +977,7 @@ getElement("jobsTable").addEventListener("click", function (event) {
     });
 
     if (report) {
-        report.status = "Completed";
-        renderEverything();
-        renderJobs();
+        saveReportStatus(report, "Completed");
     }
 });
 
@@ -964,116 +1013,7 @@ function populateRouteDropdowns() {
         : names[names.length - 1] || "";
 }
 
-/*
- * Dijkstra's algorithm:
- * 1. Start at the selected location.
- * 2. Choose the unvisited location with the smallest known time.
- * 3. Ignore closed roads.
- * 4. Update travel times for connected locations.
- * 5. Reconstruct the fastest path.
- */
-function findFastestRoute(start, destination) {
-    const distance = {};
-    const previous = {};
-    const unvisited = new Set(Object.keys(locations));
-
-    for (const location of unvisited) {
-        distance[location] = Infinity;
-        previous[location] = null;
-    }
-
-    if (!(start in distance) || !(destination in distance)) {
-        return null;
-    }
-
-    distance[start] = 0;
-
-    while (unvisited.size > 0) {
-        let current = null;
-        let smallestDistance = Infinity;
-
-        for (const location of unvisited) {
-            if (distance[location] < smallestDistance) {
-                smallestDistance = distance[location];
-                current = location;
-            }
-        }
-
-        if (current === null || smallestDistance === Infinity) {
-            break;
-        }
-
-        if (current === destination) {
-            break;
-        }
-
-        unvisited.delete(current);
-
-        for (const road of roads) {
-            // Closed roads cannot be used.
-            if (road.closed) {
-                continue;
-            }
-
-            let nextLocation = null;
-
-            if (road.from === current) {
-                nextLocation = road.to;
-            } else if (road.to === current) {
-                nextLocation = road.from;
-            }
-
-            if (
-                nextLocation === null ||
-                !unvisited.has(nextLocation)
-            ) {
-                continue;
-            }
-
-            const newDistance = distance[current] + road.time;
-
-            if (newDistance < distance[nextLocation]) {
-                distance[nextLocation] = newDistance;
-
-                previous[nextLocation] = {
-                    location: current,
-                    roadId: road.id
-                };
-            }
-        }
-
-        unvisited.delete(current);
-    }
-
-    if (distance[destination] === Infinity) {
-        return null;
-    }
-
-    const path = [];
-    const roadIds = [];
-    let current = destination;
-
-    while (current !== null) {
-        path.unshift(current);
-
-        const previousStep = previous[current];
-
-        if (previousStep) {
-            roadIds.unshift(previousStep.roadId);
-            current = previousStep.location;
-        } else {
-            current = null;
-        }
-    }
-
-    return {
-        path: path,
-        roadIds: roadIds,
-        time: distance[destination]
-    };
-}
-
-getElement("routeForm").addEventListener("submit", function (event) {
+getElement("routeForm").addEventListener("submit", async function (event) {
     event.preventDefault();
 
     if (
@@ -1094,52 +1034,27 @@ getElement("routeForm").addEventListener("submit", function (event) {
         return;
     }
 
-    if (start === destination) {
-        resultBox.textContent =
-            "Starting location and destination are the same. Travel time: 0 minutes.";
-        return;
-    }
+    resultBox.textContent = "Calculating route...";
+    try {
+        const query = new URLSearchParams({ start: start, destination: destination });
+        const response = await fetch(`${ROUTE_API_URL}?${query.toString()}`, {
+            cache: "no-store"
+        });
+        const payload = await response.json();
 
-    const result = findFastestRoute(start, destination);
+        if (!response.ok) {
+            throw new Error(payload.error || `Route API returned HTTP ${response.status}.`);
+        }
 
-    if (result === null) {
         resultBox.innerHTML = `
-            <strong>No reachable route found.</strong>
-            <p>Try another destination or check the road closures.</p>
+            <strong>Fastest reachable route found</strong>
+            <p>${escapeHTML(payload.path)}</p>
+            <p><strong>Estimated travel time:</strong> ${Number(payload.time)} minutes</p>
+            <p>Closed roads are excluded from this calculation.</p>
         `;
-        return;
+    } catch (error) {
+        resultBox.textContent = `Could not calculate route: ${error.message}`;
     }
-
-    const pathHTML = result.path.map(function (location, index) {
-        const arrow = index === 0
-            ? ""
-            : '<span class="route-arrow">→</span>';
-
-        return `
-            ${arrow}
-            <span class="route-stop">${escapeHTML(location)}</span>
-        `;
-    }).join("");
-
-    resultBox.innerHTML = `
-        <strong>Fastest reachable route found</strong>
-
-        <div class="route-path">
-            ${pathHTML}
-        </div>
-
-        <p>
-            <strong>Road segments:</strong>
-            ${result.roadIds.map(escapeHTML).join(" → ")}
-        </p>
-
-        <p>
-            <strong>Estimated travel time:</strong>
-            ${result.time} minutes
-        </p>
-
-        <p>Closed roads are excluded from this calculation.</p>
-    `;
 });
 
 function locationsCount() {
@@ -1158,6 +1073,65 @@ function renderEverything() {
     renderReports();
     renderTeams();
     populateRouteDropdowns();
+}
+
+function mapReport(report) {
+    if (
+        !report ||
+        typeof report.id !== "string" ||
+        typeof report.roadId !== "string" ||
+        typeof report.damage !== "string" ||
+        typeof report.status !== "string"
+    ) {
+        throw new Error("The Report API returned an invalid report record.");
+    }
+
+    return {
+        id: report.id,
+        roadId: report.roadId,
+        damage: report.damage,
+        severity: report.severity,
+        risk: report.risk,
+        importance: report.importance,
+        traffic: Number(report.traffic),
+        status: report.status,
+        assignedTeam: "T1",
+        submittedAt: report.submittedAt
+    };
+}
+
+async function loadReports() {
+    const message = getElement("reportStatusMessage");
+    if (message && currentUser) {
+        message.textContent = "Loading saved reports...";
+        message.classList.remove("error");
+    }
+
+    try {
+        const response = await fetch(REPORT_API_URL, { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || `Report API returned HTTP ${response.status}.`);
+        }
+        if (!Array.isArray(payload)) {
+            throw new Error("The Report API returned an invalid report list.");
+        }
+
+        const savedReports = payload.map(mapReport);
+        reports.splice(0, reports.length, ...savedReports);
+        reportLoadError = "";
+        if (message && currentUser) {
+            message.textContent = `${reports.length} saved report(s) loaded.`;
+        }
+    } catch (error) {
+        reportLoadError = error.message;
+        if (message && currentUser) {
+            message.textContent = `Cannot load saved reports: ${error.message}`;
+            message.classList.add("error");
+        }
+    }
+
+    renderEverything();
 }
 
 async function loadRoads() {

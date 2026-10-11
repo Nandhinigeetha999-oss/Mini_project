@@ -51,7 +51,7 @@ public class RoadNetwork {
         }
     }
 
-    private void addRoadToMemory(Road road) {
+    void addRoadToMemory(Road road) {
         roads.add(road);
         graph.putIfAbsent(road.from, new ArrayList<>());
         graph.putIfAbsent(road.to, new ArrayList<>());

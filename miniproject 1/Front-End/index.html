@@ -286,6 +286,26 @@
 
                     <p id="roadConnectionStatus" class="road-connection-status" aria-live="polite"></p>
 
+                    <div class="road-add" data-roles="engineering">
+                        <h4>Register road segment</h4>
+                        <form id="roadForm" class="road-create-form">
+                            <label for="newRoadId">Road ID
+                                <input id="newRoadId" type="text" placeholder="e.g. R020" required>
+                            </label>
+                            <label for="newRoadStart">Start location
+                                <input id="newRoadStart" type="text" required>
+                            </label>
+                            <label for="newRoadEnd">Destination
+                                <input id="newRoadEnd" type="text" required>
+                            </label>
+                            <label for="newRoadTime">Travel time (minutes)
+                                <input id="newRoadTime" type="number" min="1" step="1" required>
+                            </label>
+                            <button class="primary" type="submit">＋ Add Road</button>
+                        </form>
+                        <p id="roadFormMessage" class="road-form-message" aria-live="polite"></p>
+                    </div>
+
                     <div class="table-wrap">
                         <table>
                             <thead>
@@ -363,7 +383,7 @@
 
                         <div class="form-actions">
                             <button class="primary" type="submit">＋ Submit Damage Report</button>
-                            <small>Demo reports are not saved to the database.</small>
+                            <small id="reportFormMessage">Reports are saved to the municipal database.</small>
                         </div>
                     </form>
                 </section>
@@ -372,16 +392,19 @@
                     <div class="panel-heading">
                         <div>
                             <h3>All Damage Reports</h3>
-                            <p>Engineering can update the demo report status.</p>
+                            <p>Reports and status updates are saved in SQLite.</p>
                         </div>
                     </div>
+
+                    <p id="reportStatusMessage" class="road-connection-status" aria-live="polite"></p>
 
                     <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Report ID</th><th>Road</th><th>Damage</th>
-                                    <th>Severity</th><th>Risk</th><th>Status</th><th>Action</th>
+                                    <th>Severity</th><th>Risk</th><th>Status</th>
+                                    <th>Submitted</th><th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="reportsTable"></tbody>
@@ -504,8 +527,8 @@
                     </div>
 
                     <div class="note">
-                        <strong>Final integration</strong>
-                        <p>The final version should call your Java backend and reuse your existing Dijkstra implementation.</p>
+                        <strong>Route conditions</strong>
+                        <p>Routes are calculated by the Java backend and exclude closed roads.</p>
                     </div>
                 </section>
             </section>

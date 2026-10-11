@@ -25,6 +25,10 @@ VS Code setup:
       javac -cp ".;lib\sqlite-jdbc-<version>.jar" (Get-ChildItem -Filter *.java | ForEach-Object { $_.FullName })
       java -cp ".;lib\sqlite-jdbc-<version>.jar" Main
 
+   Linux/macOS (run from the folder containing Main.java):
+      javac -cp ".:lib/sqlite-jdbc-<version>.jar" *.java
+      java -cp ".:lib/sqlite-jdbc-<version>.jar" Main
+
    Replace <version> with the actual version in the JAR filename.
 
 The database file is created automatically in the working directory the first time the program runs.
@@ -34,15 +38,25 @@ FRONTEND ROAD NETWORK CONNECTION:
 - Start Main with the SQLite JDBC JAR on its classpath. Main starts the Road API at
    http://127.0.0.1:8080/api/roads while keeping the console application available.
 - Keep that Java process running, then open Front-End/index.html with VS Code Live Server.
-- The frontend loads the road list, map, dashboard counts, report road choices, and route finder
-   from the SQLite-backed API. Engineering close/reopen actions update SQLite immediately.
-- Use the Road Network page's Refresh button to reload changes made in the Java console.
+   Alternatively, run `python3 -m http.server 5501` from the project folder and open
+   http://127.0.0.1:5501/Front-End/ in a browser.
+- The frontend loads roads, reports, report road choices, and routes from the SQLite-backed API.
+   Engineering can add roads and close/reopen them; Ward Officers can submit damage reports;
+   report status changes are also saved. The route finder uses Java's Dijkstra implementation.
+- The Road Network page's Refresh button reloads road changes. Opening the Reports page reloads
+   saved reports from SQLite.
 - If the frontend says it cannot load roads, verify the Java process is running and that the
    SQLite JDBC JAR is included in its runtime classpath.
-- The API listens on 127.0.0.1:8080 and exposes GET /api/roads and PATCH
-   /api/roads/{roadId}/status?closed=true|false on localhost port 8080.
-- Reports, demo accounts, and maintenance teams are not yet connected to the database; only roads
-   and their closure state use this API.
+- The API listens on 127.0.0.1:8080 and exposes:
+   - GET /api/roads to list roads.
+   - POST /api/roads with form fields id, from, to, and time to add a road.
+   - PATCH /api/roads/{roadId}/status?closed=true|false to save closure status.
+   - GET /api/routes?start={location}&destination={location} to calculate a route.
+   - GET /api/reports to list saved damage reports.
+   - POST /api/reports with roadId, damageType, severity, risk, importance, and traffic to submit.
+   - PATCH /api/reports/{reportId}/status?status=Pending|Active|Completed to save report status.
+- Demo accounts and maintenance-team data remain frontend/demo data; damage reports and roads
+   are persisted in SQLite.
 
 WARD OFFICER REPORT FLOW:
 - Enter an existing Road ID.
@@ -53,7 +67,6 @@ WARD OFFICER REPORT FLOW:
   the road ID, endpoints, and travel time alone.
 - Report ID and submission timestamp are generated automatically.
 
-SCOPE NOTE:
-This update persists the road network and road closure status. Damage reports are still held in
-memory, as in the original project, so reports and their timestamps are not retained after the
-application closes. Report persistence can be added as a separate next step.
+PERSISTENCE NOTE:
+Road segments, closure status, damage report details, report statuses, and report submission
+timestamps are retained in SQLite after the application closes.

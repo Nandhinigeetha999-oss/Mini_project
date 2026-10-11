@@ -584,6 +584,47 @@ input:focus, select:focus {
     color: #bd3744;
 }
 
+.road-add {
+    margin: 0 0 18px;
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.road-add h4 {
+    margin: 0 0 12px;
+}
+
+.road-create-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    align-items: end;
+    gap: 10px;
+}
+
+.road-create-form label {
+    display: grid;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.road-create-form input {
+    width: 100%;
+    min-width: 0;
+}
+
+.road-form-message {
+    min-height: 1.4em;
+    margin: 8px 0 0;
+    color: #16865c;
+    font-size: 11px;
+}
+
+.road-form-message.error {
+    color: #bd3744;
+}
+
 .text-button {
     border: 0;
     background: transparent;

@@ -1,3 +1,4 @@
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.PriorityQueue;
@@ -27,6 +28,16 @@ public class Main {
 
     // Automatically gives each report an order
     static int reportOrder = 1;
+
+    static {
+        try {
+            for (RoadDamage report : DatabaseManager.loadDamageReports()) {
+                addReportToMemory(report);
+            }
+        } catch (SQLException exception) {
+            System.err.println("Could not load damage reports: " + exception.getMessage());
+        }
+    }
 
 
     // ==========================================
@@ -69,6 +80,14 @@ public class Main {
                     System.out.println("\nInvalid choice.");
             }
         }
+    }
+
+    static synchronized void addReportToMemory(RoadDamage report) {
+        if (!reportMap.containsKey(report.reportId)) {
+            reports.add(report);
+            reportMap.put(report.reportId, report);
+        }
+        reportOrder = Math.max(reportOrder, report.reportOrder + 1);
     }
 
 
@@ -238,19 +257,6 @@ public class Main {
             return;
         }
 
-        // Report ID is generated automatically; the Ward Officer does not type it.
-        String reportId;
-        do {
-            reportId = String.format("DR%03d", reportOrder);
-            if (reportMap.containsKey(reportId)) {
-                reportOrder++;
-            } else {
-                break;
-            }
-        } while (true);
-
-        String location = selectedRoad.from + " - " + selectedRoad.to;
-
         System.out.println("\nRoad details fetched from the stored road network:");
         System.out.println("Road ID       : " + selectedRoad.roadId);
         System.out.println("Starting Point: " + selectedRoad.from);
@@ -271,24 +277,19 @@ public class Main {
         int roadImportance = readRating("Enter Road Importance (1-3): ");
         int trafficRank = readRating("Enter Traffic Rank (1-3): ");
 
-        RoadDamage report = new RoadDamage(
-                reportId,
-                selectedRoad.roadId,
-                location,
-                selectedRoad.from,
-                selectedRoad.to,
-                selectedRoad.travelTime,
-                damageType,
-                severity,
-                accidentRisk,
-                roadImportance,
-                trafficRank,
-                reportOrder
-        );
-
-        reports.add(report);
-        reportMap.put(reportId, report);
-        reportOrder++;
+        RoadDamage report;
+        try {
+            report = DatabaseManager.insertDamageReport(
+                selectedRoad.roadId, damageType,
+                DatabaseManager.ratingLabel(severity),
+                DatabaseManager.ratingLabel(accidentRisk),
+                DatabaseManager.ratingLabel(roadImportance), trafficRank
+            );
+            addReportToMemory(report);
+        } catch (SQLException | IllegalArgumentException exception) {
+            System.out.println("Could not save report: " + exception.getMessage());
+            return;
+        }
 
         System.out.println("\n------------------------------------------");
         System.out.println("Road damage report submitted successfully.");

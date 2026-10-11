@@ -6,6 +6,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.concurrent.Executors;
 
 /** Serves the persisted road network to the browser frontend. */
@@ -18,7 +19,7 @@ public final class RoadApiServer {
             HttpServer server = HttpServer.create(
                 new InetSocketAddress("127.0.0.1", port), 0
             );
-            server.createContext("/api/roads", RoadApiServer::handleRoads);
+            server.createContext("/api/", RoadApiServer::handleRoads);
             server.setExecutor(Executors.newCachedThreadPool());
             server.start();
             System.out.println("Road API ready at http://localhost:" + port + "/api/roads");
@@ -44,6 +45,26 @@ public final class RoadApiServer {
                 return;
             }
 
+            if ("GET".equalsIgnoreCase(method) && "/api/reports".equals(path)) {
+                sendReports(exchange, DatabaseManager.loadDamageReports());
+                return;
+            }
+
+            if ("POST".equalsIgnoreCase(method) && "/api/roads".equals(path)) {
+                createRoad(exchange);
+                return;
+            }
+
+            if ("POST".equalsIgnoreCase(method) && "/api/reports".equals(path)) {
+                createReport(exchange);
+                return;
+            }
+
+            if ("GET".equalsIgnoreCase(method) && "/api/routes".equals(path)) {
+                sendRoute(exchange);
+                return;
+            }
+
             String[] pathParts = path.split("/");
             if (
                 "PATCH".equalsIgnoreCase(method) &&
@@ -56,12 +77,130 @@ public final class RoadApiServer {
                 return;
             }
 
+            if (
+                "PATCH".equalsIgnoreCase(method) &&
+                pathParts.length == 5 &&
+                "api".equals(pathParts[1]) &&
+                "reports".equals(pathParts[2]) &&
+                "status".equals(pathParts[4])
+            ) {
+                updateReportStatus(exchange, pathParts[3]);
+                return;
+            }
+
             sendJson(exchange, 404, "{\"error\":\"API endpoint not found.\"}");
         } catch (SQLException exception) {
             sendJson(exchange, 500, "{\"error\":\"Database error: " + jsonEscape(exception.getMessage()) + "\"}");
         } catch (IllegalArgumentException exception) {
             sendJson(exchange, 400, "{\"error\":\"" + jsonEscape(exception.getMessage()) + "\"}");
         }
+    }
+
+    private static void createReport(HttpExchange exchange) throws IOException, SQLException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String roadId = queryValue(body, "roadId");
+        String damageType = queryValue(body, "damageType");
+        String severity = queryValue(body, "severity");
+        String risk = queryValue(body, "risk");
+        String importance = queryValue(body, "importance");
+        String trafficValue = queryValue(body, "traffic");
+        if (trafficValue == null) {
+            throw new IllegalArgumentException("Traffic rank is required.");
+        }
+
+        int trafficRank;
+        try {
+            trafficRank = Integer.parseInt(trafficValue);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("Traffic rank must be a whole number.");
+        }
+
+        RoadDamage report = DatabaseManager.insertDamageReport(
+            roadId, damageType, severity, risk, importance, trafficRank
+        );
+        Main.addReportToMemory(report);
+        sendReport(exchange, 201, report);
+    }
+
+    private static void updateReportStatus(HttpExchange exchange, String encodedReportId)
+            throws IOException, SQLException {
+        String reportId = URLDecoder.decode(encodedReportId, "UTF-8");
+        String status = queryValue(exchange.getRequestURI().getRawQuery(), "status");
+        if (!DatabaseManager.updateDamageReportStatus(reportId, status)) {
+            sendJson(exchange, 404, "{\"error\":\"Report not found.\"}");
+            return;
+        }
+
+        RoadDamage report = Main.reportMap.get(reportId);
+        if (report != null) {
+            report.status = status.toUpperCase(Locale.ROOT);
+            sendReport(exchange, 200, report);
+            return;
+        }
+
+        for (RoadDamage savedReport : DatabaseManager.loadDamageReports()) {
+            if (savedReport.reportId.equalsIgnoreCase(reportId)) {
+                sendReport(exchange, 200, savedReport);
+                return;
+            }
+        }
+        sendJson(exchange, 404, "{\"error\":\"Report not found.\"}");
+    }
+
+    private static void createRoad(HttpExchange exchange) throws IOException, SQLException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String roadId = queryValue(body, "id");
+        String from = queryValue(body, "from");
+        String to = queryValue(body, "to");
+        String travelTimeValue = queryValue(body, "time");
+
+        if (roadId == null || roadId.isBlank() || from == null || from.isBlank() ||
+            to == null || to.isBlank() || travelTimeValue == null) {
+            throw new IllegalArgumentException("Road ID, start, destination, and travel time are required.");
+        }
+
+        int travelTime;
+        try {
+            travelTime = Integer.parseInt(travelTimeValue);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("Travel time must be a positive whole number.");
+        }
+        if (travelTime <= 0) {
+            throw new IllegalArgumentException("Travel time must be a positive whole number.");
+        }
+
+        if (!DatabaseManager.insertRoad(roadId, from, to, travelTime)) {
+            sendJson(exchange, 409, "{\"error\":\"That road ID already exists.\"}");
+            return;
+        }
+
+        Road road = new Road(roadId.trim(), from.trim(), to.trim(), travelTime);
+        Main.roadNetwork.addRoadToMemory(road);
+        sendRoad(exchange, 201, road);
+    }
+
+    private static void sendRoute(HttpExchange exchange) throws IOException {
+        String query = exchange.getRequestURI().getRawQuery();
+        String start = queryValue(query, "start");
+        String destination = queryValue(query, "destination");
+
+        if (start == null || destination == null || start.isBlank() || destination.isBlank()) {
+            throw new IllegalArgumentException("Provide both start and destination locations.");
+        }
+        if (!Main.roadNetwork.graph.containsKey(start) ||
+            !Main.roadNetwork.graph.containsKey(destination)) {
+            throw new IllegalArgumentException("Select locations from the current road network.");
+        }
+
+        int travelTime = Dijkstra.findShortestDistance(Main.roadNetwork, start, destination);
+        if (travelTime < 0) {
+            sendJson(exchange, 404, "{\"error\":\"No open route connects those locations.\"}");
+            return;
+        }
+
+        String route = Dijkstra.findShortestRoute(Main.roadNetwork, start, destination);
+        sendJson(exchange, 200, "{\"path\":\"" + jsonEscape(route) +
+            "\",\"time\":" + travelTime + "}");
     }
 
     private static void updateRoadStatus(HttpExchange exchange, String encodedRoadId)
@@ -124,6 +263,51 @@ public final class RoadApiServer {
         sendJson(exchange, 200, json.toString());
     }
 
+    private static void sendReports(HttpExchange exchange, ArrayList<RoadDamage> reports)
+            throws IOException {
+        StringBuilder json = new StringBuilder("[");
+        for (int index = 0; index < reports.size(); index++) {
+            if (index > 0) {
+                json.append(',');
+            }
+            appendReport(json, reports.get(index));
+        }
+        json.append(']');
+        sendJson(exchange, 200, json.toString());
+    }
+
+    private static void sendReport(HttpExchange exchange, int status, RoadDamage report)
+            throws IOException {
+        StringBuilder json = new StringBuilder();
+        appendReport(json, report);
+        sendJson(exchange, status, json.toString());
+    }
+
+    private static void appendReport(StringBuilder json, RoadDamage report) {
+        json.append("{\"id\":\"").append(jsonEscape(report.reportId))
+            .append("\",\"roadId\":\"").append(jsonEscape(report.roadId))
+            .append("\",\"location\":\"").append(jsonEscape(report.location))
+            .append("\",\"from\":\"").append(jsonEscape(report.startLocation))
+            .append("\",\"to\":\"").append(jsonEscape(report.endLocation))
+            .append("\",\"time\":").append(report.roadTravelTime)
+            .append(",\"damage\":\"").append(jsonEscape(report.damageType))
+            .append("\",\"severity\":\"").append(DatabaseManager.ratingLabel(report.severity))
+            .append("\",\"risk\":\"").append(DatabaseManager.ratingLabel(report.accidentRisk))
+            .append("\",\"importance\":\"").append(DatabaseManager.ratingLabel(report.roadImportance))
+            .append("\",\"traffic\":").append(report.trafficRank)
+            .append(",\"status\":\"").append(displayStatus(report.status))
+            .append("\",\"reportOrder\":").append(report.reportOrder)
+            .append(",\"submittedAt\":\"").append(jsonEscape(report.submittedAt.toString()))
+            .append("\"}");
+    }
+
+    private static String displayStatus(String status) {
+        if (status == null || status.isEmpty()) {
+            return "Pending";
+        }
+        return status.substring(0, 1).toUpperCase() + status.substring(1).toLowerCase();
+    }
+
     private static void sendRoad(HttpExchange exchange, int status, Road road) throws IOException {
         StringBuilder json = new StringBuilder();
         appendRoad(json, road);
@@ -159,7 +343,7 @@ public final class RoadApiServer {
 
     private static void addCorsHeaders(HttpExchange exchange) {
         exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, PATCH, OPTIONS");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
         exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
     }
 

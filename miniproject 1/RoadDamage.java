@@ -27,6 +27,17 @@ public class RoadDamage {
                String damageType, int severity, int accidentRisk,
                int roadImportance, int trafficRank, int reportOrder) {
 
+        this(reportId, roadId, location, startLocation, endLocation, roadTravelTime,
+            damageType, severity, accidentRisk, roadImportance, trafficRank,
+            reportOrder, LocalDateTime.now(), "PENDING");
+        }
+
+        RoadDamage(String reportId, String roadId, String location,
+               String startLocation, String endLocation, int roadTravelTime,
+               String damageType, int severity, int accidentRisk,
+               int roadImportance, int trafficRank, int reportOrder,
+               LocalDateTime submittedAt, String status) {
+
         this.reportId = reportId;
         this.roadId = roadId;
         this.location = location;
@@ -39,8 +50,8 @@ public class RoadDamage {
         this.roadImportance = roadImportance;
         this.trafficRank = trafficRank;
         this.reportOrder = reportOrder;
-        this.submittedAt = LocalDateTime.now();
-        this.status = "PENDING";
+        this.submittedAt = submittedAt;
+        this.status = status;
     }
 
     String getFormattedSubmissionTime() {
