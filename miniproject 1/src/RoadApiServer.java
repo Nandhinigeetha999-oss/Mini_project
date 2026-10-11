@@ -67,6 +67,16 @@ public final class RoadApiServer {
                 return;
             }
 
+            if ("POST".equalsIgnoreCase(method) && "/api/equipment".equals(path)) {
+                createEquipment(exchange);
+                return;
+            }
+
+            if ("DELETE".equalsIgnoreCase(method) && "/api/equipment".equals(path)) {
+                deleteEquipment(exchange);
+                return;
+            }
+
             if ("POST".equalsIgnoreCase(method) && "/api/roads".equals(path)) {
                 createRoad(exchange);
                 return;
@@ -427,6 +437,42 @@ public final class RoadApiServer {
         json.append("{\"name\":\"").append(jsonEscape(location.name))
             .append("\",\"latitude\":").append(location.latitude)
             .append(",\"longitude\":").append(location.longitude).append('}');
+    }
+
+    private static void createEquipment(HttpExchange exchange) throws IOException, SQLException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String damageType = queryValue(body, "damageType");
+        String equipmentName = queryValue(body, "equipmentName");
+
+        if (damageType == null || damageType.isBlank() || equipmentName == null || equipmentName.isBlank()) {
+            throw new IllegalArgumentException("Damage type and equipment name are required.");
+        }
+
+        boolean inserted = DatabaseManager.insertEquipment(damageType, equipmentName);
+        if (!inserted) {
+            sendJson(exchange, 409, "{\"error\":\"This equipment name already exists for that damage type.\"}");
+            return;
+        }
+
+        sendJson(exchange, 201, "{\"damageType\":\"" + jsonEscape(damageType.trim()) + "\",\"equipmentName\":\"" + jsonEscape(equipmentName.trim()) + "\"}");
+    }
+
+    private static void deleteEquipment(HttpExchange exchange) throws IOException, SQLException {
+        String query = exchange.getRequestURI().getRawQuery();
+        String damageType = queryValue(query, "damageType");
+        String equipmentName = queryValue(query, "equipmentName");
+
+        if (damageType == null || damageType.isBlank() || equipmentName == null || equipmentName.isBlank()) {
+            throw new IllegalArgumentException("Damage type and equipment name are required.");
+        }
+
+        boolean removed = DatabaseManager.deleteEquipment(damageType, equipmentName);
+        if (!removed) {
+            sendJson(exchange, 404, "{\"error\":\"Equipment not found.\"}");
+            return;
+        }
+
+        sendJson(exchange, 200, "{\"damageType\":\"" + jsonEscape(damageType.trim()) + "\",\"equipmentName\":\"" + jsonEscape(equipmentName.trim()) + "\"}");
     }
 
     private static void createLocation(HttpExchange exchange) throws IOException, SQLException {

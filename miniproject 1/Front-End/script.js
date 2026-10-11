@@ -1014,10 +1014,12 @@ async function loadEquipmentOptions(damageType) {
             throw new Error(payload.error || `Equipment API returned HTTP ${response.status}.`);
         }
 
-        equipmentSelect.innerHTML = '<option value="">Select equipment</option>' +
-            payload.map(function (item) {
-                return `<option value="${escapeHTML(item)}">${escapeHTML(item)}</option>`;
-            }).join("");
+        payload.forEach(function (item) {
+            const option = document.createElement("option");
+            option.value = item;
+            option.textContent = item;
+            equipmentSelect.appendChild(option);
+        });
 
         if (payload.includes(selectedValue)) {
             equipmentSelect.value = selectedValue;
@@ -1028,6 +1030,7 @@ async function loadEquipmentOptions(damageType) {
 }
 
 getElement("equipmentDamageType").addEventListener("change", function () {
+    getElement("equipmentName").value = "";
     loadEquipmentOptions(this.value);
 });
 loadEquipmentOptions(getElement("equipmentDamageType").value);
@@ -1064,7 +1067,7 @@ getElement("teamRegistrationForm").addEventListener("submit", function (event) {
     renderEverything();
 });
 
-getElement("equipmentForm").addEventListener("submit", function (event) {
+getElement("equipmentForm").addEventListener("submit", async function (event) {
     event.preventDefault();
 
     if (currentUser?.role !== "engineering") {
@@ -1072,10 +1075,11 @@ getElement("equipmentForm").addEventListener("submit", function (event) {
     }
 
     const team = teams.find(item => item.id === getElement("equipmentTeam").value);
+    const damageType = getElement("equipmentDamageType").value;
     const equipmentName = getElement("equipmentName").value.trim();
     const message = getElement("teamFormMessage");
 
-    if (!team || !equipmentName) {
+    if (!team || !equipmentName || !damageType) {
         return;
     }
 
@@ -1085,14 +1089,31 @@ getElement("equipmentForm").addEventListener("submit", function (event) {
         return;
     }
 
-    team.equipment.push(equipmentName);
-    const saved = saveTeams();
-    event.target.reset();
-    message.textContent = saved
-        ? `${equipmentName} added to team ${team.id}.`
-        : `${equipmentName} added for this session. Browser storage is unavailable.`;
-    message.classList.remove("error");
-    renderEverything();
+    try {
+        const response = await fetch("http://127.0.0.1:8080/api/equipment", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+            body: new URLSearchParams({ damageType, equipmentName })
+        });
+
+        const payload = await response.json();
+        if (!response.ok && response.status !== 409) {
+            throw new Error(payload.error || `Equipment API returned HTTP ${response.status}.`);
+        }
+
+        team.equipment.push(equipmentName);
+        const saved = saveTeams();
+        event.target.reset();
+        loadEquipmentOptions(damageType);
+        message.textContent = saved
+            ? `${equipmentName} added to team ${team.id}.`
+            : `${equipmentName} added for this session. Browser storage is unavailable.`;
+        message.classList.remove("error");
+        renderEverything();
+    } catch (error) {
+        message.textContent = `Could not save equipment: ${error.message}`;
+        message.classList.add("error");
+    }
 });
 
 getElement("teamsGrid").addEventListener("click", function (event) {

@@ -156,15 +156,27 @@ public class DatabaseManager {
             {"Pothole", "Pothole Patch Kit"},
             {"Pothole", "Asphalt Tamper"},
             {"Pothole", "Road Roller"},
+            {"Pothole", "Cold Mix Recycler"},
+            {"Pothole", "Compaction Plate"},
+            {"Pothole", "Surface Leveler"},
             {"Road Crack", "Road Cutter"},
             {"Road Crack", "Crack Sealing Machine"},
             {"Road Crack", "Jackhammer"},
+            {"Road Crack", "Sealing Gun"},
+            {"Road Crack", "Surface Cleaner"},
+            {"Road Crack", "Joint Filler"},
             {"Resurfacing", "Resurfacing Machine"},
             {"Resurfacing", "Milling Machine"},
             {"Resurfacing", "Asphalt Finisher"},
+            {"Resurfacing", "Bitumen Sprayer"},
+            {"Resurfacing", "Road Sweeper"},
+            {"Resurfacing", "Curb Cutter"},
             {"General", "Traffic Cone"},
             {"General", "Safety Sign"},
-            {"General", "Inspection Ladder"}
+            {"General", "Inspection Ladder"},
+            {"General", "Traffic Barricade"},
+            {"General", "Portable Light Tower"},
+            {"General", "Safety Barrier"}
         };
         String sql = "INSERT OR IGNORE INTO equipment_catalog (damage_type, equipment_name) VALUES (?, ?)";
 
@@ -197,6 +209,34 @@ public class DatabaseManager {
             }
         }
         return equipment;
+    }
+
+    public static boolean insertEquipment(String damageType, String equipmentName) throws SQLException {
+        if (damageType == null || damageType.isBlank() || equipmentName == null || equipmentName.isBlank()) {
+            throw new IllegalArgumentException("Damage type and equipment name are required.");
+        }
+
+        String sql = "INSERT OR IGNORE INTO equipment_catalog (damage_type, equipment_name) VALUES (?, ?)";
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, damageType.trim());
+            statement.setString(2, equipmentName.trim());
+            return statement.executeUpdate() > 0;
+        }
+    }
+
+    public static boolean deleteEquipment(String damageType, String equipmentName) throws SQLException {
+        if (damageType == null || damageType.isBlank() || equipmentName == null || equipmentName.isBlank()) {
+            throw new IllegalArgumentException("Damage type and equipment name are required.");
+        }
+
+        String sql = "DELETE FROM equipment_catalog WHERE damage_type = ? COLLATE NOCASE AND equipment_name = ? COLLATE NOCASE";
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, damageType.trim());
+            statement.setString(2, equipmentName.trim());
+            return statement.executeUpdate() > 0;
+        }
     }
 
     public static LinkedHashMap<String, Location> loadLocations() throws SQLException {
