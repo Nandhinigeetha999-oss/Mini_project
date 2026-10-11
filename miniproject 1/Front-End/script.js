@@ -5,6 +5,7 @@
 const ROAD_API_URL = "http://127.0.0.1:8080/api/roads";
 const ROUTE_API_URL = "http://127.0.0.1:8080/api/routes";
 const REPORT_API_URL = "http://127.0.0.1:8080/api/reports";
+const LOCATION_API_URL = "http://127.0.0.1:8080/api/locations";
 
 const users = {
     ward: {
@@ -252,6 +253,7 @@ function startApplication() {
 
 getElement("logoutButton").addEventListener("click", function () {
     currentUser = null;
+    currentRoutePath = [];
 
     getElement("application").classList.add("hidden");
     getElement("loginScreen").classList.remove("hidden");
@@ -312,6 +314,20 @@ function showPage(pageName) {
     if (pageName === "reports") loadReports();
     if (pageName === "teams") renderTeams();
     if (pageName === "jobs") renderJobs();
+
+    if (pageName === "dashboard") {
+        if (roadMapInstance) {
+            roadMapInstance.invalidateSize();
+        }
+        renderRoadMap();
+    }
+
+    if (pageName === "routes") {
+        if (routeMapInstance) {
+            routeMapInstance.invalidateSize();
+        }
+        renderRouteMap();
+    }
 }
 
 document.querySelectorAll(".nav-link").forEach(function (button) {
@@ -369,71 +385,221 @@ function renderStatistics() {
 }
 
 /* ---------------------------------
-   DRAW THE SAMPLE ROAD NETWORK
+   ROAD NETWORK MAP (coordinates come from the backend)
 ---------------------------------- */
 
-function renderRoadMap() {
-    if (roads.length === 0) {
-        getElement("roadMap").innerHTML = `
-            <text x="350" y="205" text-anchor="middle" class="map-label">
-                ${roadLoadError ? "Road database unavailable" : "No roads in the database"}
-            </text>
-        `;
+/* locations of the last calculated fastest route, used to highlight the map. */
+let currentRoutePath = [];
+
+function getLocationNames() {
+    const names = Object.keys(locations);
+    if (names.length > 0) {
+        return names.sort();
+    }
+    return [...new Set(roads.flatMap(function (road) {
+        return [road.from, road.to];
+    }))].sort();
+}
+
+/* The only source of [lat, lng]: coordinates stored in the database and
+ * served by the API. The browser never invents a position. */
+function getLocationCoords(name) {
+    if (!name || typeof name !== "string") {
+        return null;
+    }
+    const location = locations[name];
+    if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
+        return [location.lat, location.lng];
+    }
+    return null;
+}
+
+/* Prefer the coordinates the backend attached to the segment itself,
+ * then fall back to the location register served by the API. */
+function roadEndpointCoords(road, key) {
+    const lat = road[key + "Lat"];
+    const lng = road[key + "Lng"];
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return [Number(lat), Number(lng)];
+    }
+    return getLocationCoords(road[key]);
+}
+
+function locationPairKey(from, to) {
+    return [from, to].sort().join("→");
+}
+
+/* ---------------------------------
+   LEAFLET MAP (coordinates from the backend)
+---------------------------------- */
+
+/* The map is centred on the municipal area; every marker and line gets its
+ * [lat, lng] from the locations stored in the database and served by the
+ * API, never from layout math in the browser. */
+const NETWORK_CENTER = [13.0827, 80.2707];
+
+let roadMapInstance = null;
+let routeMapInstance = null;
+let roadMapLayer = null;
+let routeMapLayer = null;
+
+function createMap(elementId) {
+    const element = getElement(elementId);
+
+    if (!element || typeof L === "undefined") {
+        return null;
+    }
+
+    const map = L.map(element, {
+        center: NETWORK_CENTER,
+        zoom: 15
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    return map;
+}
+
+function ensureMap(which) {
+    if (which === "routes") {
+        if (!routeMapInstance) {
+            routeMapInstance = createMap("routeMap");
+        }
+        return routeMapInstance;
+    }
+
+    if (!roadMapInstance) {
+        roadMapInstance = createMap("roadMap");
+    }
+    return roadMapInstance;
+}
+
+/* Build Leaflet layers: road segments, route highlight and location markers. */
+function buildNetworkLayer(routeNames) {
+    const layer = L.featureGroup();
+    const route = routeNames || [];
+    const routeEdges = new Set();
+    const routeNodes = new Set(route);
+
+    for (let i = 0; i + 1 < route.length; i++) {
+        routeEdges.add(locationPairKey(route[i], route[i + 1]));
+    }
+
+    roads.forEach(function (road) {
+        const a = roadEndpointCoords(road, "from");
+        const b = roadEndpointCoords(road, "to");
+
+        /* A segment can only be drawn when the backend supplied both ends. */
+        if (!a || !b) {
+            return;
+        }
+
+        const latlngs = [a, b];
+        const tooltip = `${road.id} · ${road.from} → ${road.to} · ${road.time} min${road.closed ? " · CLOSED" : ""}`;
+        const segment = L.polyline(latlngs, {
+            color: road.closed ? "#d94d57" : "#397be9",
+            weight: road.closed ? 4 : 5,
+            opacity: 0.9,
+            dashArray: road.closed ? "8 8" : null,
+            lineCap: "round"
+        });
+
+        segment.bindTooltip(tooltip, { sticky: true });
+        layer.addLayer(segment);
+
+        if (routeEdges.has(locationPairKey(road.from, road.to))) {
+            layer.addLayer(L.polyline(latlngs, {
+                color: "#f5a623",
+                weight: 7,
+                opacity: 0.9,
+                dashArray: "12 9",
+                lineCap: "round"
+            }));
+        }
+    });
+
+    getLocationNames().forEach(function (name) {
+        const point = getLocationCoords(name);
+
+        if (!point) {
+            return;
+        }
+
+        const isStart = route.length > 0 && route[0] === name;
+        const isEnd = route.length > 0 && route[route.length - 1] === name;
+        const onRoute = routeNodes.has(name);
+
+        const accent = isStart ? "#2f9e44"
+            : isEnd ? "#1971c2"
+            : onRoute ? "#f5a623"
+            : "#397be9";
+
+        const marker = L.circleMarker(point, {
+            radius: onRoute ? 9 : 6,
+            color: accent,
+            weight: 3,
+            fillColor: isStart || isEnd ? accent : onRoute ? "#fff4e0" : "#ffffff",
+            fillOpacity: 1
+        });
+
+        marker.bindTooltip(name, { direction: "top", offset: [0, -6] });
+        layer.addLayer(marker);
+    });
+
+    return layer;
+}
+
+function fitMapToNetwork(map, layer) {
+    const key = getLocationNames().join("|") + "|roads:" + roads.length;
+    const size = map.getSize();
+
+    /* Skip while the panel is hidden (zero size); fit once it is visible. */
+    if (map.__fittedKey === key || !size || size.x === 0) {
         return;
     }
 
-    const edgeHTML = roads.map(function (road) {
-        const start = locations[road.from];
-        const end = locations[road.to];
+    const bounds = layer.getBounds();
 
-        if (!start || !end) {
-            return "";
-        }
+    if (bounds && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [30, 30] });
+        map.__fittedKey = key;
+    }
+}
 
-        const middleX = (start.x + end.x) / 2;
-        const middleY = (start.y + end.y) / 2;
+function renderLeafletMap(which) {
+    const map = ensureMap(which);
 
-        const roadClass = road.closed ? "road-edge closed" : "road-edge";
-        const labelColor = road.closed ? "#c33e48" : "#346bd0";
+    if (!map) {
+        return;
+    }
 
-        return `
-            <g>
-                <line class="${roadClass}"
-                    x1="${start.x}" y1="${start.y}"
-                    x2="${end.x}" y2="${end.y}" />
+    const previous = which === "routes" ? routeMapLayer : roadMapLayer;
 
-                <rect x="${middleX - 20}" y="${middleY - 13}"
-                    width="40" height="23" rx="6"
-                    fill="white" stroke="#dce5ef" />
+    if (previous) {
+        map.removeLayer(previous);
+    }
 
-                <text x="${middleX}" y="${middleY + 3}"
-                    text-anchor="middle" font-size="10"
-                    font-weight="700" fill="${labelColor}">
-                    ${escapeHTML(road.id)}
-                </text>
-            </g>
-        `;
-    }).join("");
+    const layer = buildNetworkLayer(currentRoutePath);
+    layer.addTo(map);
 
-    const nodeHTML = Object.entries(locations).map(function (entry) {
-        const name = entry[0];
-        const point = entry[1];
+    if (which === "routes") {
+        routeMapLayer = layer;
+    } else {
+        roadMapLayer = layer;
+    }
 
-        return `
-            <g>
-                <circle class="map-node"
-                    cx="${point.x}" cy="${point.y}" r="8" />
+    fitMapToNetwork(map, layer);
+}
 
-                <text class="map-label"
-                    x="${point.x}" y="${point.y - 16}"
-                    text-anchor="middle">
-                    ${escapeHTML(name)}
-                </text>
-            </g>
-        `;
-    }).join("");
+function renderRoadMap() {
+    renderLeafletMap("roads");
+}
 
-    getElement("roadMap").innerHTML = edgeHTML + nodeHTML;
+function renderRouteMap() {
+    renderLeafletMap("routes");
 }
 
 /* ---------------------------------
@@ -1046,13 +1212,23 @@ getElement("routeForm").addEventListener("submit", async function (event) {
             throw new Error(payload.error || `Route API returned HTTP ${response.status}.`);
         }
 
+        currentRoutePath = String(payload.path || "")
+            .split(" -> ")
+            .map(function (name) { return name.trim(); })
+            .filter(Boolean);
+
         resultBox.innerHTML = `
             <strong>Fastest reachable route found</strong>
             <p>${escapeHTML(payload.path)}</p>
             <p><strong>Estimated travel time:</strong> ${Number(payload.time)} minutes</p>
             <p>Closed roads are excluded from this calculation.</p>
         `;
+        renderRouteMap();
+        renderRoadMap();
     } catch (error) {
+        currentRoutePath = [];
+        renderRouteMap();
+        renderRoadMap();
         resultBox.textContent = `Could not calculate route: ${error.message}`;
     }
 });
@@ -1068,6 +1244,7 @@ function locationsCount() {
 function renderEverything() {
     renderStatistics();
     renderRoadMap();
+    renderRouteMap();
     renderRecentReports();
     renderRoads();
     renderReports();
@@ -1149,6 +1326,10 @@ async function loadRoads() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
+        /* Coordinates for the map, markers and route pickers come from the
+         * backend location register, never from the browser. */
+        await loadLocations();
+
         const response = await fetch(ROAD_API_URL, {
             cache: "no-store",
             signal: controller.signal
@@ -1177,12 +1358,15 @@ async function loadRoads() {
                 from: road.from,
                 to: road.to,
                 time: Number(road.time),
-                closed: Boolean(road.closed)
+                closed: Boolean(road.closed),
+                fromLat: road.fromLat,
+                fromLng: road.fromLng,
+                toLat: road.toLat,
+                toLng: road.toLng
             };
         });
 
         roadLoadError = "";
-        updateLocationsFromRoads();
         if (status) {
             status.textContent = `Connected to database · ${roads.length} road(s) loaded`;
             status.classList.remove("error");
@@ -1209,20 +1393,36 @@ async function loadRoads() {
     renderEverything();
 }
 
-function updateLocationsFromRoads() {
-    const locationNames = [...new Set(roads.flatMap(function (road) {
-        return [road.from, road.to];
-    }))];
-    const centerX = 350;
-    const centerY = 205;
-    const radiusX = Math.min(270, 65 + locationNames.length * 25);
-    const radiusY = Math.min(145, 40 + locationNames.length * 14);
+/* Pull the location register from the backend: name → { lat, lng }.
+ * These coordinates are the only positions the map is allowed to use. */
+async function loadLocations() {
+    try {
+        const response = await fetch(LOCATION_API_URL, { cache: "no-store" });
+        const payload = await response.json();
 
-    locations = Object.fromEntries(locationNames.map(function (name, index) {
-        const angle = (2 * Math.PI * index / Math.max(locationNames.length, 1)) - Math.PI / 2;
-        return [name, {
-            x: centerX + Math.cos(angle) * radiusX,
-            y: centerY + Math.sin(angle) * radiusY
-        }];
-    }));
+        if (!response.ok) {
+            throw new Error(payload.error || `Location API returned HTTP ${response.status}.`);
+        }
+        if (!Array.isArray(payload)) {
+            throw new Error("The Location API returned an invalid location list.");
+        }
+
+        const byName = {};
+        payload.forEach(function (location) {
+            const lat = Number(location.latitude);
+            const lng = Number(location.longitude);
+            if (
+                typeof location.name === "string" &&
+                Number.isFinite(lat) &&
+                Number.isFinite(lng)
+            ) {
+                byName[location.name] = { lat: lat, lng: lng };
+            }
+        });
+        locations = byName;
+    } catch (error) {
+        /* Keep whatever is already in the register if the API is down;
+         * road segments that carry their own coordinates still render. */
+        locations = Object.keys(locations).length > 0 ? locations : {};
+    }
 }

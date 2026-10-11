@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 
 /** Handles permanent storage of the road network and damage reports in SQLite. */
@@ -47,7 +48,14 @@ public class DatabaseManager {
                 "status TEXT NOT NULL DEFAULT 'PENDING', " +
                 "submitted_at TEXT NOT NULL)"
             );
+            statement.executeUpdate(
+                "CREATE TABLE IF NOT EXISTS locations (" +
+                "name TEXT PRIMARY KEY COLLATE NOCASE, " +
+                "latitude REAL NOT NULL, " +
+                "longitude REAL NOT NULL)"
+            );
             seedRoads(connection);
+            seedLocations(connection);
         }
     }
 
@@ -86,6 +94,99 @@ public class DatabaseManager {
                 preparedStatement.addBatch();
             }
             preparedStatement.executeBatch();
+        }
+    }
+
+    /**
+     * Coordinates for every named municipal place. The map only ever plots the
+     * latitudes/longitudes stored here and served by the API, so the browser
+     * never has to invent a position for a location.
+     */
+    private static void seedLocations(Connection connection) throws SQLException {
+        Object[][] locations = {
+            {"Municipal Office", 13.075529, 80.258186},
+            {"Market Junction", 13.083090, 80.258186},
+            {"Government School", 13.081383, 80.263886},
+            {"City Hospital", 13.081139, 80.271257},
+            {"Bus Stand", 13.075529, 80.270529},
+            {"Railway Station", 13.075529, 80.278714},
+            {"Main Park", 13.089871, 80.259043},
+            {"Sports Ground", 13.089871, 80.266800},
+            {"Water Tank", 13.089871, 80.275414},
+            {"Industrial Estate", 13.089871, 80.283214},
+            {"Bypass Junction", 13.082798, 80.282486},
+            {"Post Office", 13.075529, 80.261829},
+            {"Library", 13.075529, 80.264271},
+            {"Fire Station", 13.085529, 80.277429},
+            {"Police Station", 13.085920, 80.283214}
+        };
+        String sql = "INSERT OR IGNORE INTO locations (name, latitude, longitude) VALUES (?, ?, ?)";
+
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            for (Object[] location : locations) {
+                preparedStatement.setString(1, (String) location[0]);
+                preparedStatement.setDouble(2, (Double) location[1]);
+                preparedStatement.setDouble(3, (Double) location[2]);
+                preparedStatement.addBatch();
+            }
+            preparedStatement.executeBatch();
+        }
+    }
+
+    public static LinkedHashMap<String, Location> loadLocations() throws SQLException {
+        LinkedHashMap<String, Location> locations = new LinkedHashMap<>();
+        String sql = "SELECT name, latitude, longitude FROM locations ORDER BY name";
+
+        try (Connection connection = connect();
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery(sql)) {
+            while (result.next()) {
+                locations.put(result.getString("name"), new Location(
+                    result.getString("name"),
+                    result.getDouble("latitude"),
+                    result.getDouble("longitude")
+                ));
+            }
+        }
+        return locations;
+    }
+
+    public static Location findLocation(String name) throws SQLException {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        String sql = "SELECT name, latitude, longitude FROM locations WHERE name = ? COLLATE NOCASE";
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, name.trim());
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) {
+                    return new Location(
+                        result.getString("name"),
+                        result.getDouble("latitude"),
+                        result.getDouble("longitude")
+                    );
+                }
+            }
+        }
+        return null;
+    }
+
+    public static boolean insertLocation(String name, double latitude, double longitude)
+            throws SQLException {
+        String sql = "INSERT INTO locations (name, latitude, longitude) VALUES (?, ?, ?)";
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, name.trim());
+            statement.setDouble(2, latitude);
+            statement.setDouble(3, longitude);
+            statement.executeUpdate();
+            return true;
+        } catch (SQLException exception) {
+            if (exception.getErrorCode() == 19) {
+                return false;
+            }
+            throw exception;
         }
     }
 

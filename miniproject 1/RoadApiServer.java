@@ -6,7 +6,9 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Executors;
 
 /** Serves the persisted road network to the browser frontend. */
@@ -47,6 +49,16 @@ public final class RoadApiServer {
 
             if ("GET".equalsIgnoreCase(method) && "/api/reports".equals(path)) {
                 sendReports(exchange, DatabaseManager.loadDamageReports());
+                return;
+            }
+
+            if ("GET".equalsIgnoreCase(method) && "/api/locations".equals(path)) {
+                sendLocations(exchange, DatabaseManager.loadLocations());
+                return;
+            }
+
+            if ("POST".equalsIgnoreCase(method) && "/api/locations".equals(path)) {
+                createLocation(exchange);
                 return;
             }
 
@@ -179,7 +191,7 @@ public final class RoadApiServer {
         sendRoad(exchange, 201, road);
     }
 
-    private static void sendRoute(HttpExchange exchange) throws IOException {
+    private static void sendRoute(HttpExchange exchange) throws IOException, SQLException {
         String query = exchange.getRequestURI().getRawQuery();
         String start = queryValue(query, "start");
         String destination = queryValue(query, "destination");
@@ -199,8 +211,26 @@ public final class RoadApiServer {
         }
 
         String route = Dijkstra.findShortestRoute(Main.roadNetwork, start, destination);
-        sendJson(exchange, 200, "{\"path\":\"" + jsonEscape(route) +
-            "\",\"time\":" + travelTime + "}");
+        LinkedHashMap<String, Location> locations = DatabaseManager.loadLocations();
+
+        StringBuilder json = new StringBuilder();
+        json.append("{\"path\":\"").append(jsonEscape(route))
+            .append("\",\"time\":").append(travelTime)
+            .append(",\"points\":[");
+        String[] stops = route == null ? new String[0] : route.split(" -> ");
+        int index = 0;
+        for (String stop : stops) {
+            Location location = lookupLocation(locations, stop.trim());
+            if (location == null) {
+                continue;
+            }
+            if (index++ > 0) {
+                json.append(',');
+            }
+            appendLocation(json, location);
+        }
+        json.append("]}");
+        sendJson(exchange, 200, json.toString());
     }
 
     private static void updateRoadStatus(HttpExchange exchange, String encodedRoadId)
@@ -251,13 +281,15 @@ public final class RoadApiServer {
         return null;
     }
 
-    private static void sendRoads(HttpExchange exchange, ArrayList<Road> roads) throws IOException {
+    private static void sendRoads(HttpExchange exchange, ArrayList<Road> roads)
+            throws IOException, SQLException {
+        LinkedHashMap<String, Location> locations = DatabaseManager.loadLocations();
         StringBuilder json = new StringBuilder("[");
         for (int index = 0; index < roads.size(); index++) {
             if (index > 0) {
                 json.append(',');
             }
-            appendRoad(json, roads.get(index));
+            appendRoad(json, roads.get(index), locations);
         }
         json.append(']');
         sendJson(exchange, 200, json.toString());
@@ -308,18 +340,106 @@ public final class RoadApiServer {
         return status.substring(0, 1).toUpperCase() + status.substring(1).toLowerCase();
     }
 
-    private static void sendRoad(HttpExchange exchange, int status, Road road) throws IOException {
+    private static void sendRoad(HttpExchange exchange, int status, Road road)
+            throws IOException, SQLException {
+        LinkedHashMap<String, Location> locations = DatabaseManager.loadLocations();
         StringBuilder json = new StringBuilder();
-        appendRoad(json, road);
+        appendRoad(json, road, locations);
         sendJson(exchange, status, json.toString());
     }
 
-    private static void appendRoad(StringBuilder json, Road road) {
+    private static void appendRoad(StringBuilder json, Road road,
+            Map<String, Location> locations) {
+        Location fromLocation = lookupLocation(locations, road.from);
+        Location toLocation = lookupLocation(locations, road.to);
+
         json.append("{\"id\":\"").append(jsonEscape(road.roadId))
             .append("\",\"from\":\"").append(jsonEscape(road.from))
             .append("\",\"to\":\"").append(jsonEscape(road.to))
             .append("\",\"time\":").append(road.travelTime)
-            .append(",\"closed\":").append(road.closed).append('}');
+            .append(",\"closed\":").append(road.closed);
+        appendCoordinate(json, "from", fromLocation);
+        appendCoordinate(json, "to", toLocation);
+        json.append('}');
+    }
+
+    private static void appendCoordinate(StringBuilder json, String prefix, Location location) {
+        if (location == null) {
+            json.append(",\"").append(prefix).append("Lat\":null")
+                .append(",\"").append(prefix).append("Lng\":null");
+        } else {
+            json.append(",\"").append(prefix).append("Lat\":").append(location.latitude)
+                .append(",\"").append(prefix).append("Lng\":").append(location.longitude);
+        }
+    }
+
+    /* Case-insensitive lookup so roads added with differently-cased names still plot. */
+    private static Location lookupLocation(Map<String, Location> locations, String name) {
+        if (name == null) {
+            return null;
+        }
+        Location exact = locations.get(name);
+        if (exact != null) {
+            return exact;
+        }
+        for (Location location : locations.values()) {
+            if (location.name.equalsIgnoreCase(name)) {
+                return location;
+            }
+        }
+        return null;
+    }
+
+    private static void sendLocations(HttpExchange exchange,
+            LinkedHashMap<String, Location> locations) throws IOException {
+        StringBuilder json = new StringBuilder("[");
+        int index = 0;
+        for (Location location : locations.values()) {
+            if (index++ > 0) {
+                json.append(',');
+            }
+            appendLocation(json, location);
+        }
+        json.append(']');
+        sendJson(exchange, 200, json.toString());
+    }
+
+    private static void appendLocation(StringBuilder json, Location location) {
+        json.append("{\"name\":\"").append(jsonEscape(location.name))
+            .append("\",\"latitude\":").append(location.latitude)
+            .append(",\"longitude\":").append(location.longitude).append('}');
+    }
+
+    private static void createLocation(HttpExchange exchange) throws IOException, SQLException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String name = queryValue(body, "name");
+        String latitudeValue = queryValue(body, "lat");
+        String longitudeValue = queryValue(body, "lng");
+
+        if (name == null || name.isBlank() || latitudeValue == null || longitudeValue == null) {
+            throw new IllegalArgumentException("Location name, latitude, and longitude are required.");
+        }
+
+        double latitude;
+        double longitude;
+        try {
+            latitude = Double.parseDouble(latitudeValue.trim());
+            longitude = Double.parseDouble(longitudeValue.trim());
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("Latitude and longitude must be numbers.");
+        }
+        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+            throw new IllegalArgumentException("Coordinates are out of range.");
+        }
+
+        if (!DatabaseManager.insertLocation(name, latitude, longitude)) {
+            sendJson(exchange, 409, "{\"error\":\"That location already exists.\"}");
+            return;
+        }
+
+        sendJson(exchange, 201, "{\"name\":\"" + jsonEscape(name.trim()) +
+            "\",\"latitude\":" + latitude +
+            ",\"longitude\":" + longitude + "}");
     }
 
     private static String jsonEscape(String value) {

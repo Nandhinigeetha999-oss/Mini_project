@@ -654,6 +654,14 @@ input:focus, select:focus {
     border-top: 3px dashed #d94d57;
 }
 
+.legend-route {
+    display: inline-block;
+    width: 18px;
+    border-top: 3px dashed #f5a623;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
 .map-container {
     background-color: #f2f6fa;
     background-image:
@@ -671,6 +679,27 @@ input:focus, select:focus {
     min-height: 230px;
 }
 
+.leaflet-map {
+    width: 100%;
+    height: 340px;
+    background: #eef2f7;
+}
+
+.leaflet-map .leaflet-tile-pane {
+    filter: saturate(0.85) brightness(1.03);
+}
+
+.leaflet-container {
+    font: inherit;
+    background: #eef2f7;
+}
+
+.leaflet-tooltip {
+    font-size: 11px;
+    font-weight: 600;
+    color: #293b53;
+}
+
 .map-container > small {
     display: block;
     background: #ffffffd9;
@@ -680,27 +709,103 @@ input:focus, select:focus {
     font-size: 10px;
 }
 
+.map-area {
+    fill: rgba(74, 144, 226, 0.06);
+    stroke: rgba(56, 101, 173, 0.35);
+    stroke-width: 2;
+    stroke-dasharray: 6 8;
+}
+
+.map-district {
+    fill: rgba(71, 170, 118, 0.06);
+    stroke: rgba(57, 153, 93, 0.25);
+    stroke-width: 1.5;
+}
+
 .road-edge {
+    fill: none;
     stroke: #397be9;
     stroke-width: 5;
     stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 2px 2px rgba(57, 123, 233, 0.2));
 }
 
 .road-edge.closed {
     stroke: #d94d57;
-    stroke-dasharray: 8 7;
+    stroke-dasharray: 10 8;
 }
 
 .map-node {
     fill: white;
     stroke: #397be9;
     stroke-width: 4;
+    filter: drop-shadow(0 3px 4px rgba(57, 123, 233, 0.25));
 }
 
 .map-label {
     fill: #293b53;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
+    paint-order: stroke;
+    stroke: #f2f6fa;
+    stroke-width: 3px;
+    stroke-linejoin: round;
+}
+
+.map-label-small {
+    font-size: 10px;
+    fill: #42566e;
+    font-weight: 600;
+}
+
+.map-node-red {
+    fill: #d93f3f;
+    stroke: #d93f3f;
+    stroke-width: 3;
+}
+
+.map-node-orange {
+    fill: #f5a623;
+    stroke: #f5a623;
+    stroke-width: 3;
+}
+
+/* Fastest-route highlight drawn on top of the network. */
+.road-edge.route {
+    stroke: #f5a623;
+    stroke-width: 7;
+    stroke-dasharray: 14 10;
+    stroke-linecap: round;
+    filter: drop-shadow(0 2px 3px rgba(245, 166, 35, 0.45));
+    animation: route-dash 1s linear infinite;
+}
+
+@keyframes route-dash {
+    to {
+        stroke-dashoffset: -24;
+    }
+}
+
+.map-node-route {
+    fill: #fff4e0;
+    stroke: #f5a623;
+}
+
+.map-node-start {
+    fill: #2f9e44;
+    stroke: #2f9e44;
+    stroke-width: 4;
+}
+
+.map-node-end {
+    fill: #1971c2;
+    stroke: #1971c2;
+    stroke-width: 4;
+}
+
+.route-map-container {
+    margin-top: 16px;
 }
 
 .summary-item {

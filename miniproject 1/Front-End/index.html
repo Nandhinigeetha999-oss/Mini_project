@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RoadNexus | Smart Municipal Road Management</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -214,13 +215,14 @@
                         <div class="legend">
                             <span><i class="legend-open"></i> Open road</span>
                             <span><i class="legend-closed"></i> Closed road</span>
+                            <span><i class="legend-route"></i> Fastest route</span>
                             <span>● Location</span>
                         </div>
 
                         <div class="map-container">
-                            <svg id="roadMap" viewBox="0 0 700 410"
-                                role="img" aria-label="Illustrative road network"></svg>
-                            <small>Illustrative map — not a live geographic map</small>
+                            <div id="roadMap" class="leaflet-map"
+                                role="img" aria-label="Municipal road network map"></div>
+                            <small>Network map generated from the road database</small>
                         </div>
                     </section>
 
@@ -526,6 +528,12 @@
                         Select a start and destination to calculate a sample route.
                     </div>
 
+                    <div class="map-container route-map-container">
+                        <div id="routeMap" class="leaflet-map"
+                            role="img" aria-label="Fastest route map"></div>
+                        <small>Live network map — the fastest route is highlighted</small>
+                    </div>
+
                     <div class="note">
                         <strong>Route conditions</strong>
                         <p>Routes are calculated by the Java backend and exclude closed roads.</p>
@@ -540,6 +548,7 @@
         </main>
     </div>
 
-    <script src="script.js"></script>
+    <script src="vendor/leaflet/leaflet.js"></script>
+    <script src="script.js?v=4"></script>
 </body>
 </html>
