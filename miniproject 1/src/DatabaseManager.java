@@ -49,6 +49,16 @@ public class DatabaseManager {
                 "submitted_at TEXT NOT NULL)"
             );
             statement.executeUpdate(
+                "DELETE FROM damage_reports WHERE rowid NOT IN (" +
+                "SELECT MIN(rowid) FROM damage_reports GROUP BY road_id, start_location, " +
+                "end_location, damage_type, severity, accident_risk, road_importance, traffic_rank)"
+            );
+            statement.executeUpdate(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_damage_reports_duplicate_check " +
+                "ON damage_reports (road_id, start_location, end_location, damage_type, " +
+                "severity, accident_risk, road_importance, traffic_rank)"
+            );
+            statement.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS locations (" +
                 "name TEXT PRIMARY KEY COLLATE NOCASE, " +
                 "latitude REAL NOT NULL, " +
@@ -273,6 +283,26 @@ public class DatabaseManager {
                     startLocation = roadResult.getString("start_location");
                     endLocation = roadResult.getString("end_location");
                     roadTravelTime = roadResult.getInt("travel_time");
+                }
+            }
+
+            String duplicateCheckSql = "SELECT 1 FROM damage_reports WHERE road_id = ? COLLATE NOCASE " +
+                "AND start_location = ? AND end_location = ? AND damage_type = ? COLLATE NOCASE " +
+                "AND severity = ? AND accident_risk = ? AND road_importance = ? AND traffic_rank = ? LIMIT 1";
+            try (PreparedStatement duplicateCheck = connection.prepareStatement(duplicateCheckSql)) {
+                duplicateCheck.setString(1, roadId.trim());
+                duplicateCheck.setString(2, startLocation);
+                duplicateCheck.setString(3, endLocation);
+                duplicateCheck.setString(4, damageType.trim());
+                duplicateCheck.setInt(5, severityRating);
+                duplicateCheck.setInt(6, riskRating);
+                duplicateCheck.setInt(7, importanceRating);
+                duplicateCheck.setInt(8, trafficRank);
+                try (ResultSet duplicateResult = duplicateCheck.executeQuery()) {
+                    if (duplicateResult.next()) {
+                        connection.rollback();
+                        throw new IllegalArgumentException("This exact road damage report has already been submitted.");
+                    }
                 }
             }
 
