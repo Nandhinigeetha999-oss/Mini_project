@@ -456,8 +456,19 @@
                                     <select id="equipmentTeam" required></select>
                                 </div>
                                 <div>
+                                    <label for="equipmentDamageType">Damage type</label>
+                                    <select id="equipmentDamageType" required>
+                                        <option value="Pothole">Pothole</option>
+                                        <option value="Road Crack">Road Crack</option>
+                                        <option value="Resurfacing">Resurfacing</option>
+                                        <option value="General">General</option>
+                                    </select>
+                                </div>
+                                <div>
                                     <label for="equipmentName">Equipment name</label>
-                                    <input id="equipmentName" type="text" placeholder="e.g. Asphalt Roller" required>
+                                    <select id="equipmentName" required>
+                                        <option value="">Select equipment</option>
+                                    </select>
                                 </div>
                             </div>
                             <button class="secondary" type="submit">＋ Add Equipment</button>

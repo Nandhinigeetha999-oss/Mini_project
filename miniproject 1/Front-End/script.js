@@ -999,6 +999,39 @@ function renderTeams() {
     }).join("");
 }
 
+async function loadEquipmentOptions(damageType) {
+    const equipmentSelect = getElement("equipmentName");
+    const selectedValue = equipmentSelect.value;
+    const query = damageType ? `?damageType=${encodeURIComponent(damageType)}` : "";
+
+    equipmentSelect.innerHTML = '<option value="">Select equipment</option>';
+
+    try {
+        const response = await fetch(`http://127.0.0.1:8080/api/equipment${query}`, { cache: "no-store" });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(payload.error || `Equipment API returned HTTP ${response.status}.`);
+        }
+
+        equipmentSelect.innerHTML = '<option value="">Select equipment</option>' +
+            payload.map(function (item) {
+                return `<option value="${escapeHTML(item)}">${escapeHTML(item)}</option>`;
+            }).join("");
+
+        if (payload.includes(selectedValue)) {
+            equipmentSelect.value = selectedValue;
+        }
+    } catch (error) {
+        console.warn("Could not load equipment list:", error);
+    }
+}
+
+getElement("equipmentDamageType").addEventListener("change", function () {
+    loadEquipmentOptions(this.value);
+});
+loadEquipmentOptions(getElement("equipmentDamageType").value);
+
 getElement("teamRegistrationForm").addEventListener("submit", function (event) {
     event.preventDefault();
 

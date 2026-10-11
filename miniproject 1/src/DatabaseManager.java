@@ -59,6 +59,13 @@ public class DatabaseManager {
                 "severity, accident_risk, road_importance, traffic_rank)"
             );
             statement.executeUpdate(
+                "CREATE TABLE IF NOT EXISTS equipment_catalog (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "damage_type TEXT NOT NULL, " +
+                "equipment_name TEXT NOT NULL, " +
+                "UNIQUE(damage_type, equipment_name))"
+            );
+            statement.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS locations (" +
                 "name TEXT PRIMARY KEY COLLATE NOCASE, " +
                 "latitude REAL NOT NULL, " +
@@ -66,6 +73,7 @@ public class DatabaseManager {
             );
             seedRoads(connection);
             seedLocations(connection);
+            seedEquipmentCatalog(connection);
         }
     }
 
@@ -141,6 +149,54 @@ public class DatabaseManager {
             }
             preparedStatement.executeBatch();
         }
+    }
+
+    private static void seedEquipmentCatalog(Connection connection) throws SQLException {
+        Object[][] equipment = {
+            {"Pothole", "Pothole Patch Kit"},
+            {"Pothole", "Asphalt Tamper"},
+            {"Pothole", "Road Roller"},
+            {"Road Crack", "Road Cutter"},
+            {"Road Crack", "Crack Sealing Machine"},
+            {"Road Crack", "Jackhammer"},
+            {"Resurfacing", "Resurfacing Machine"},
+            {"Resurfacing", "Milling Machine"},
+            {"Resurfacing", "Asphalt Finisher"},
+            {"General", "Traffic Cone"},
+            {"General", "Safety Sign"},
+            {"General", "Inspection Ladder"}
+        };
+        String sql = "INSERT OR IGNORE INTO equipment_catalog (damage_type, equipment_name) VALUES (?, ?)";
+
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+            for (Object[] item : equipment) {
+                preparedStatement.setString(1, (String) item[0]);
+                preparedStatement.setString(2, (String) item[1]);
+                preparedStatement.addBatch();
+            }
+            preparedStatement.executeBatch();
+        }
+    }
+
+    public static ArrayList<String> loadEquipmentCatalog(String damageType) throws SQLException {
+        ArrayList<String> equipment = new ArrayList<>();
+        String sql = "SELECT equipment_name FROM equipment_catalog " +
+            "WHERE (? IS NULL OR ? = '' OR damage_type = ? COLLATE NOCASE) " +
+            "ORDER BY equipment_name";
+
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            String normalizedType = damageType == null ? "" : damageType.trim();
+            statement.setString(1, normalizedType);
+            statement.setString(2, normalizedType);
+            statement.setString(3, normalizedType);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    equipment.add(result.getString("equipment_name"));
+                }
+            }
+        }
+        return equipment;
     }
 
     public static LinkedHashMap<String, Location> loadLocations() throws SQLException {

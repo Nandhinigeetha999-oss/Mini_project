@@ -47,6 +47,11 @@ public final class RoadApiServer {
                 return;
             }
 
+            if ("GET".equalsIgnoreCase(method) && "/api/equipment".equals(path)) {
+                sendEquipment(exchange);
+                return;
+            }
+
             if ("GET".equalsIgnoreCase(method) && "/api/reports".equals(path)) {
                 sendReports(exchange, DatabaseManager.loadDamageReports());
                 return;
@@ -290,6 +295,20 @@ public final class RoadApiServer {
                 json.append(',');
             }
             appendRoad(json, roads.get(index), locations);
+        }
+        json.append(']');
+        sendJson(exchange, 200, json.toString());
+    }
+
+    private static void sendEquipment(HttpExchange exchange) throws IOException, SQLException {
+        String damageType = queryValue(exchange.getRequestURI().getRawQuery(), "damageType");
+        ArrayList<String> equipment = DatabaseManager.loadEquipmentCatalog(damageType);
+        StringBuilder json = new StringBuilder("[");
+        for (int index = 0; index < equipment.size(); index++) {
+            if (index > 0) {
+                json.append(',');
+            }
+            json.append('"').append(jsonEscape(equipment.get(index))).append('"');
         }
         json.append(']');
         sendJson(exchange, 200, json.toString());
