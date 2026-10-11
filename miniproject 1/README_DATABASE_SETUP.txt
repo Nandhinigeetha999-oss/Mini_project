@@ -8,6 +8,7 @@ Changes included:
 5. Ward Officer enters a Road ID; the application fetches start, end, location, and travel time.
 6. Report IDs (DR001, DR002, ...) and submission date/time are generated automatically.
 7. Report listing shows the submission date/time and stored road details.
+8. A local HTTP API serves the SQLite road network to the browser frontend.
 
 IMPORTANT: Add the SQLite JDBC driver before running the program.
 
@@ -20,14 +21,28 @@ VS Code setup:
 5. If VS Code does not automatically detect the JAR, add it to Java project referenced libraries.
    Alternatively, use a terminal from the project folder:
 
-   Windows PowerShell:
-   javac -cp ".;lib\sqlite-jdbc-<version>.jar" *.java
-   java -cp ".;lib\sqlite-jdbc-<version>.jar" Main
+   Windows PowerShell (run from the folder containing Main.java):
+      javac -cp ".;lib\sqlite-jdbc-<version>.jar" (Get-ChildItem -Filter *.java | ForEach-Object { $_.FullName })
+      java -cp ".;lib\sqlite-jdbc-<version>.jar" Main
 
    Replace <version> with the actual version in the JAR filename.
 
 The database file is created automatically in the working directory the first time the program runs.
 Do not delete smart_road_maintenance.db if you want to keep your saved road network.
+
+FRONTEND ROAD NETWORK CONNECTION:
+- Start Main with the SQLite JDBC JAR on its classpath. Main starts the Road API at
+   http://127.0.0.1:8080/api/roads while keeping the console application available.
+- Keep that Java process running, then open Front-End/index.html with VS Code Live Server.
+- The frontend loads the road list, map, dashboard counts, report road choices, and route finder
+   from the SQLite-backed API. Engineering close/reopen actions update SQLite immediately.
+- Use the Road Network page's Refresh button to reload changes made in the Java console.
+- If the frontend says it cannot load roads, verify the Java process is running and that the
+   SQLite JDBC JAR is included in its runtime classpath.
+- The API listens on 127.0.0.1:8080 and exposes GET /api/roads and PATCH
+   /api/roads/{roadId}/status?closed=true|false on localhost port 8080.
+- Reports, demo accounts, and maintenance teams are not yet connected to the database; only roads
+   and their closure state use this API.
 
 WARD OFFICER REPORT FLOW:
 - Enter an existing Road ID.

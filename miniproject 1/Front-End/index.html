@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoadNexus | Smart Municipal Road Management</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <section id="loginScreen" class="login-screen">
+        <div class="login-brand">
+            <div class="logo">RN</div>
+            <div>
+                <h1>RoadNexus</h1>
+                <p>SMART MUNICIPAL ROAD MANAGEMENT</p>
+            </div>
+        </div>
+
+        <div class="login-layout">
+            <div class="intro">
+                <p class="eyebrow">SENTHAMIZH NAGAR · MUNICIPAL INFRASTRUCTURE</p>
+                <h2>Smarter Routes.<br>Faster Repairs.<br><span>Better Roads.</span></h2>
+                <p>
+                    A unified workspace for road damage reporting, road-network
+                    monitoring, maintenance coordination and route planning.
+                </p>
+                <ul>
+                    <li>✓ Road network and closure monitoring</li>
+                    <li>✓ Damage reports and repair priorities</li>
+                    <li>✓ Maintenance teams and equipment</li>
+                    <li>✓ Fastest reachable route planning</li>
+                </ul>
+            </div>
+
+            <div class="login-card">
+                <p class="eyebrow">DEMO WORKSPACE</p>
+                <h2>Sign in to RoadNexus</h2>
+                <p class="muted">Select your role to continue.</p>
+
+                <div class="role-picker">
+                    <button class="role selected" data-role="ward">
+                        <span class="role-icon">▤</span>
+                        <span>
+                            <strong>Ward Officer</strong>
+                            <small>Submit and track damage reports</small>
+                        </span>
+                    </button>
+
+                    <button class="role" data-role="engineering">
+                        <span class="role-icon">⌁</span>
+                        <span>
+                            <strong>Engineering Section</strong>
+                            <small>Manage roads, teams and repairs</small>
+                        </span>
+                    </button>
+
+                    <button class="role" data-role="team">
+                        <span class="role-icon">♧</span>
+                        <span>
+                            <strong>Maintenance Team</strong>
+                            <small>View assigned repair jobs</small>
+                        </span>
+                    </button>
+                </div>
+
+                <form id="loginForm">
+                    <label for="username">Username / Staff ID</label>
+                    <input id="username" type="text" placeholder="Enter your staff ID" required>
+
+                    <label for="password">Password</label>
+                    <input id="password" type="password" placeholder="Enter password" required>
+
+                    <p id="loginError" class="error"></p>
+                    <button class="primary full" type="submit">
+                        Sign In <span>→</span>
+                    </button>
+                </form>
+
+                <div class="demo-note">
+                    <strong>Demo accounts</strong>
+                    <ul>
+                        <li>Ward Officer: <code>ward01</code> / <code>ward123</code></li>
+                        <li>Engineering: <code>engineer01</code> / <code>eng123</code></li>
+                        <li>Maintenance Team: <code>team01</code> / <code>team123</code></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <footer class="login-footer">
+            RoadNexus © 2026 · Smart Municipal Road Maintenance & Resource Allocation
+        </footer>
+    </section>
+
+    <!-- MAIN APPLICATION -->
+    <div id="application" class="application hidden">
+
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo">RN</div>
+                <div>
+                    <h2>RoadNexus</h2>
+                    <small>SMART ROAD MANAGEMENT</small>
+                </div>
+            </div>
+
+            <div class="signed-in">
+                <div class="avatar" id="sideAvatar">WO</div>
+                <div>
+                    <strong id="sideName">Ward Officer</strong>
+                    <small id="sideRole">Ward Officer Access</small>
+                </div>
+            </div>
+
+            <p class="nav-title">WORKSPACE</p>
+
+            <nav id="navigation">
+                <button class="nav-link active" data-page="dashboard"
+                    data-roles="ward,engineering,team">▦ &nbsp; Dashboard</button>
+
+                <button class="nav-link" data-page="roads"
+                    data-roles="engineering">⌁ &nbsp; Road Network</button>
+
+                <button class="nav-link" data-page="reports"
+                    data-roles="ward,engineering">▤ &nbsp; Damage Reports</button>
+
+                <button class="nav-link" data-page="teams"
+                    data-roles="engineering">♧ &nbsp; Maintenance Teams</button>
+
+                <button class="nav-link" data-page="jobs"
+                    data-roles="team">✓ &nbsp; My Repair Jobs</button>
+
+                <button class="nav-link" data-page="routes"
+                    data-roles="engineering,team">➤ &nbsp; Fastest Route</button>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <p>● &nbsp; Road network: SQLite</p>
+                <small>Smarter routes. Faster repairs. Better roads.</small>
+                <button id="logoutButton" class="logout-button">↪ Sign out</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">MUNICIPAL INFRASTRUCTURE</p>
+                    <h1 id="pageTitle">Dashboard</h1>
+                </div>
+
+                <div class="top-right">
+                    <span id="appDataBadge" class="demo-badge">ROAD DB: CONNECTING</span>
+                    <div class="profile">
+                        <div class="avatar" id="topAvatar">WO</div>
+                        <div>
+                            <strong id="topName">Ward Officer</strong>
+                            <small id="topRole">Ward Officer</small>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- DASHBOARD -->
+            <section id="dashboardPage" class="page active-page">
+                <div class="welcome">
+                    <div>
+                        <p class="eyebrow light">SENTHAMIZH NAGAR</p>
+                        <h2 id="welcomeTitle">Welcome to RoadNexus</h2>
+                        <p id="welcomeText">Monitor roads and coordinate maintenance.</p>
+                    </div>
+                    <button class="primary" data-go="reports"
+                        data-roles="ward,engineering">＋ View Reports</button>
+                </div>
+
+                <div class="stats">
+                    <article class="stat-card">
+                        <div>Total Roads <span class="stat-icon blue">⌁</span></div>
+                        <h2 id="totalRoads">0</h2>
+                        <small>Registered road segments</small>
+                    </article>
+
+                    <article class="stat-card">
+                        <div>Open Roads <span class="stat-icon green">✓</span></div>
+                        <h2 id="openRoads">0</h2>
+                        <small>Available for routing</small>
+                    </article>
+
+                    <article class="stat-card">
+                        <div>Pending Reports <span class="stat-icon orange">!</span></div>
+                        <h2 id="pendingReports">0</h2>
+                        <small>Awaiting repair</small>
+                    </article>
+
+                    <article class="stat-card">
+                        <div>Available Teams <span class="stat-icon purple">♧</span></div>
+                        <h2 id="availableTeams">0</h2>
+                        <small>Ready for assignment</small>
+                    </article>
+                </div>
+
+                <div class="dashboard-columns">
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <h3>Municipal Road Network</h3>
+                                <p>Road segments from the SQLite database</p>
+                            </div>
+                            <button class="text-button" data-go="roads"
+                                data-roles="engineering">View roads →</button>
+                        </div>
+
+                        <div class="legend">
+                            <span><i class="legend-open"></i> Open road</span>
+                            <span><i class="legend-closed"></i> Closed road</span>
+                            <span>● Location</span>
+                        </div>
+
+                        <div class="map-container">
+                            <svg id="roadMap" viewBox="0 0 700 410"
+                                role="img" aria-label="Illustrative road network"></svg>
+                            <small>Illustrative map — not a live geographic map</small>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <h3>Network Overview</h3>
+                                <p>Current database road status</p>
+                            </div>
+                        </div>
+
+                        <div id="networkSummary"></div>
+
+                        <div class="note">
+                            <strong>Routing rule</strong>
+                            <p>Closed roads should be excluded from fastest-route calculations.</p>
+                        </div>
+
+                        <button class="secondary full" data-go="routes"
+                            data-roles="engineering,team">Find Fastest Route →</button>
+                    </section>
+                </div>
+
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h3>Recent Damage Reports</h3>
+                            <p>Sample reports and current status</p>
+                        </div>
+                        <button class="text-button" data-go="reports"
+                            data-roles="ward,engineering">View all →</button>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Report ID</th><th>Road</th><th>Damage</th>
+                                    <th>Severity</th><th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentReports"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <!-- ROAD NETWORK -->
+            <section id="roadsPage" class="page">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h3>Road Network</h3>
+                            <p>Road records loaded from the municipal database</p>
+                        </div>
+                        <div class="road-tools">
+                            <input id="roadSearch" type="search"
+                                placeholder="Search roads or locations...">
+                            <button id="refreshRoadsButton" class="secondary" type="button"
+                                title="Refresh roads from the database" aria-label="Refresh roads from the database">↻ Refresh</button>
+                        </div>
+                    </div>
+
+                    <p id="roadConnectionStatus" class="road-connection-status" aria-live="polite"></p>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Road ID</th><th>Start</th><th>Destination</th>
+                                    <th>Travel Time</th><th>Status</th><th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="roadsTable"></tbody>
+                        </table>
+                    </div>
+                    <p class="muted">Road closures are saved in the SQLite database.</p>
+                </section>
+            </section>
+
+            <!-- DAMAGE REPORTS -->
+            <section id="reportsPage" class="page">
+                <section class="panel" id="reportFormPanel">
+                    <div class="panel-heading">
+                        <div>
+                            <h3>Submit Damage Report</h3>
+                            <p>Ward Officers can report damaged road segments.</p>
+                        </div>
+                    </div>
+
+                    <form id="reportForm" class="form-grid">
+                        <div>
+                            <label for="reportRoad">Road</label>
+                            <select id="reportRoad" required></select>
+                        </div>
+
+                        <div>
+                            <label for="damageType">Damage Type</label>
+                            <select id="damageType">
+                                <option>Pothole</option>
+                                <option>Road Crack</option>
+                                <option>Surface Damage</option>
+                                <option>Road Collapse</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="severity">Severity</label>
+                            <select id="severity">
+                                <option>Low</option><option selected>Medium</option>
+                                <option>High</option><option>Critical</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="accidentRisk">Accident Risk</label>
+                            <select id="accidentRisk">
+                                <option>Low</option><option selected>Medium</option>
+                                <option>High</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="roadImportance">Road Importance</label>
+                            <select id="roadImportance">
+                                <option>Low</option><option selected>Medium</option>
+                                <option>High</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="trafficRank">Traffic Rank</label>
+                            <select id="trafficRank">
+                                <option value="1">1 - Highest</option>
+                                <option value="2" selected>2</option>
+                                <option value="3">3</option>
+                                <option value="4">4 - Lowest</option>
+                            </select>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="primary" type="submit">＋ Submit Damage Report</button>
+                            <small>Demo reports are not saved to the database.</small>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h3>All Damage Reports</h3>
+                            <p>Engineering can update the demo report status.</p>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Report ID</th><th>Road</th><th>Damage</th>
+                                    <th>Severity</th><th>Risk</th><th>Status</th><th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportsTable"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <!-- MAINTENANCE TEAMS -->
+            <section id="teamsPage" class="page">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h3>Maintenance Teams</h3>
+                            <p>Team availability, location and equipment</p>
+                        </div>
+                    </div>
+
+                    <div class="team-management">
+                        <form id="teamRegistrationForm" class="team-form">
+                            <h4>Register a team</h4>
+                            <div class="team-form-fields">
+                                <div>
+                                    <label for="newTeamId">Team ID</label>
+                                    <input id="newTeamId" type="text" placeholder="e.g. T4" required>
+                                </div>
+                                <div>
+                                    <label for="newTeamLocation">Current location</label>
+                                    <select id="newTeamLocation" required></select>
+                                </div>
+                                <div>
+                                    <label for="newTeamAvailability">Availability</label>
+                                    <select id="newTeamAvailability">
+                                        <option value="true">Available</option>
+                                        <option value="false">Unavailable</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button class="primary" type="submit">＋ Register Team</button>
+                        </form>
+
+                        <form id="equipmentForm" class="team-form">
+                            <h4>Add equipment</h4>
+                            <div class="team-form-fields equipment-form-fields">
+                                <div>
+                                    <label for="equipmentTeam">Maintenance team</label>
+                                    <select id="equipmentTeam" required></select>
+                                </div>
+                                <div>
+                                    <label for="equipmentName">Equipment name</label>
+                                    <input id="equipmentName" type="text" placeholder="e.g. Asphalt Roller" required>
+                                </div>
+                            </div>
+                            <button class="secondary" type="submit">＋ Add Equipment</button>
+                        </form>
+                    </div>
+
+                    <p id="teamFormMessage" class="team-form-message" aria-live="polite"></p>
+                    <div id="teamsGrid" class="teams-grid"></div>
+
+                    <div class="note">
+                        <strong>Frontend demo data</strong>
+                        <p>Team and equipment changes are saved in this browser only. They are not written to the Java application or database.</p>
+                    </div>
+                </section>
+            </section>
+
+            <!-- MAINTENANCE TEAM JOBS -->
+            <section id="jobsPage" class="page">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h3>My Repair Jobs</h3>
+                            <p>Jobs assigned to the signed-in maintenance team</p>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Job ID</th><th>Report</th><th>Road</th>
+                                    <th>Damage</th><th>Status</th><th>Demo Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobsTable"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="note">
+                        In the real application, the backend must return only jobs assigned to the authenticated team.
+                    </div>
+                </section>
+            </section>
+
+            <!-- FASTEST ROUTE -->
+            <section id="routesPage" class="page">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h3>Fastest Route Finder</h3>
+                            <p>Find the fastest reachable path between two locations</p>
+                        </div>
+                    </div>
+
+                    <form id="routeForm" class="route-form">
+                        <div>
+                            <label for="routeStart">Starting Location</label>
+                            <select id="routeStart" required></select>
+                        </div>
+                        <div>
+                            <label for="routeEnd">Destination</label>
+                            <select id="routeEnd" required></select>
+                        </div>
+                        <button class="primary" type="submit">➤ Find Route</button>
+                    </form>
+
+                    <div id="routeResult" class="route-result" aria-live="polite">
+                        Select a start and destination to calculate a sample route.
+                    </div>
+
+                    <div class="note">
+                        <strong>Final integration</strong>
+                        <p>The final version should call your Java backend and reuse your existing Dijkstra implementation.</p>
+                    </div>
+                </section>
+            </section>
+
+            <footer class="app-footer">
+                <span>RoadNexus © 2026</span>
+                <span>Smart Municipal Road Maintenance & Resource Allocation</span>
+            </footer>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
