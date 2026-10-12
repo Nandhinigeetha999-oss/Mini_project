@@ -42,6 +42,11 @@ public final class RoadApiServer {
         }
 
         try {
+            if ("GET".equalsIgnoreCase(method) && "/api/database".equals(path)) {
+                sendDatabaseTables(exchange);
+                return;
+            }
+
             if ("GET".equalsIgnoreCase(method) && "/api/roads".equals(path)) {
                 sendRoads(exchange, DatabaseManager.loadRoads());
                 return;
@@ -322,6 +327,47 @@ public final class RoadApiServer {
         }
         json.append(']');
         sendJson(exchange, 200, json.toString());
+    }
+
+    private static void sendDatabaseTables(HttpExchange exchange) throws IOException, SQLException {
+        StringBuilder json = new StringBuilder();
+        appendJsonValue(json, DatabaseManager.loadDatabaseTables());
+        sendJson(exchange, 200, json.toString());
+    }
+
+    private static void appendJsonValue(StringBuilder json, Object value) {
+        if (value == null) {
+            json.append("null");
+        } else if (value instanceof String) {
+            json.append('"').append(jsonEscape((String) value)).append('"');
+        } else if (value instanceof Number || value instanceof Boolean) {
+            json.append(value);
+        } else if (value instanceof Map<?, ?>) {
+            json.append('{');
+            boolean first = true;
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                if (!first) {
+                    json.append(',');
+                }
+                first = false;
+                json.append('"').append(jsonEscape(String.valueOf(entry.getKey()))).append("\":");
+                appendJsonValue(json, entry.getValue());
+            }
+            json.append('}');
+        } else if (value instanceof Iterable<?>) {
+            json.append('[');
+            boolean first = true;
+            for (Object item : (Iterable<?>) value) {
+                if (!first) {
+                    json.append(',');
+                }
+                first = false;
+                appendJsonValue(json, item);
+            }
+            json.append(']');
+        } else {
+            json.append('"').append(jsonEscape(String.valueOf(value))).append('"');
+        }
     }
 
     private static void sendReports(HttpExchange exchange, ArrayList<RoadDamage> reports)

@@ -2,6 +2,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
@@ -18,6 +19,41 @@ public class DatabaseManager {
 
     private static Connection connect() throws SQLException {
         return DriverManager.getConnection(DATABASE_URL);
+    }
+
+    public static LinkedHashMap<String, Object> loadDatabaseTables() throws SQLException {
+        LinkedHashMap<String, Object> tables = new LinkedHashMap<>();
+        String[] tableNames = {"roads", "damage_reports", "equipment_catalog", "locations"};
+
+        try (Connection connection = connect()) {
+            for (String tableName : tableNames) {
+                ArrayList<String> columns = new ArrayList<>();
+                ArrayList<LinkedHashMap<String, Object>> rows = new ArrayList<>();
+                String sql = "SELECT * FROM \"" + tableName + "\" ORDER BY rowid";
+
+                try (Statement statement = connection.createStatement();
+                     ResultSet result = statement.executeQuery(sql)) {
+                    ResultSetMetaData metadata = result.getMetaData();
+                    for (int column = 1; column <= metadata.getColumnCount(); column++) {
+                        columns.add(metadata.getColumnName(column));
+                    }
+
+                    while (result.next()) {
+                        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                        for (int column = 1; column <= metadata.getColumnCount(); column++) {
+                            row.put(columns.get(column - 1), result.getObject(column));
+                        }
+                        rows.add(row);
+                    }
+                }
+
+                LinkedHashMap<String, Object> table = new LinkedHashMap<>();
+                table.put("columns", columns);
+                table.put("rows", rows);
+                tables.put(tableName, table);
+            }
+        }
+        return tables;
     }
 
     public static void initializeDatabase() throws SQLException {

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Explorer | RoadNexus</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #202d35;
+            --muted: #718087;
+            --line: #dce4e3;
+            --paper: #f2f5f2;
+            --white: #fff;
+            --green: #176b55;
+            --green-pale: #e4f1eb;
+            --orange: #d57b3f;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            min-width: 320px;
+            margin: 0;
+            color: var(--ink);
+            background-color: var(--paper);
+            background-image: radial-gradient(#cdd8d1 0.7px, transparent 0.7px);
+            background-size: 18px 18px;
+            font-family: "Segoe UI", sans-serif;
+        }
+
+        button, input { font: inherit; }
+        button { cursor: pointer; }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            min-height: 64px;
+            padding: 12px clamp(18px, 5vw, 72px);
+            color: #f7fbf8;
+            background: #203b35;
+        }
+
+        .brand { display: flex; align-items: center; gap: 11px; }
+        .mark {
+            display: grid;
+            width: 34px;
+            aspect-ratio: 1;
+            place-items: center;
+            border: 1px solid #82a99a;
+            color: #c4e1d2;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .brand strong { display: block; font-size: 14px; }
+        .brand span { color: #b7c9c0; font-size: 10px; }
+        .topbar a { color: #e1eee7; font-size: 13px; text-decoration: none; }
+        .topbar a:hover { text-decoration: underline; }
+
+        main { width: min(1180px, calc(100% - 36px)); margin: 36px auto 60px; }
+        .heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
+        .eyebrow { margin: 0 0 8px; color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: 1.4px; }
+        h1 { margin: 0; font-size: clamp(27px, 4vw, 38px); line-height: 1.1; }
+        .subhead { margin: 9px 0 0; color: var(--muted); font-size: 14px; }
+        .actions { display: flex; align-items: center; gap: 12px; }
+        .live { color: var(--green); font-size: 12px; white-space: nowrap; }
+        .live::before { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #32a176; content: ""; }
+        .refresh {
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid #b9c9c1;
+            background: var(--white);
+            color: var(--ink);
+        }
+        .refresh:hover { border-color: var(--green); color: var(--green); }
+
+        .counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 28px 0 26px; border-block: 1px solid var(--line); background: #ffffffb8; }
+        .count { min-height: 82px; padding: 16px 20px; border-right: 1px solid var(--line); }
+        .count:last-child { border-right: 0; }
+        .count strong { display: block; font-size: 25px; font-variant-numeric: tabular-nums; }
+        .count span { color: var(--muted); font-size: 12px; }
+
+        .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
+        .tabs { display: flex; gap: 4px; overflow-x: auto; }
+        .tab { flex: 0 0 auto; padding: 12px 15px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 13px; }
+        .tab[aria-selected="true"] { border-bottom-color: var(--green); color: var(--green); font-weight: 700; }
+        .search { width: min(250px, 32vw); min-height: 36px; margin-bottom: 7px; padding: 0 11px; border: 1px solid var(--line); background: var(--white); color: var(--ink); }
+        .search:focus { outline: 2px solid #9ac6b2; outline-offset: 1px; }
+
+        .table-meta { display: flex; justify-content: space-between; gap: 12px; padding: 14px 2px 10px; color: var(--muted); font-size: 12px; }
+        .table-wrap { overflow: auto; border: 1px solid var(--line); background: var(--white); }
+        table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; font-size: 13px; }
+        th { padding: 12px 14px; background: #eaf0ec; color: #465950; font-size: 10px; letter-spacing: .5px; text-transform: uppercase; }
+        td { padding: 12px 14px; border-top: 1px solid #e9eeeb; }
+        tbody tr:hover { background: #f6faf7; }
+        .empty { padding: 30px; color: var(--muted); text-align: center; }
+        .status { display: inline-block; padding: 4px 8px; background: var(--green-pale); color: var(--green); font-size: 11px; }
+        .status.closed, .status.pending { background: #fff0e4; color: #9c4c1e; }
+        .error { margin: 18px 0; padding: 14px; border-left: 3px solid var(--orange); background: #fff8f1; color: #783d1f; font-size: 13px; }
+        footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 13px; color: var(--muted); font-size: 11px; }
+
+        @media (max-width: 680px) {
+            .topbar { padding-inline: 18px; }
+            main { margin-top: 26px; }
+            .heading { align-items: start; flex-direction: column; }
+            .actions { width: 100%; justify-content: space-between; }
+            .counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .count:nth-child(2) { border-right: 0; }
+            .count:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+            .toolbar { align-items: stretch; flex-direction: column; gap: 4px; }
+            .tabs { margin-inline: -4px; }
+            .tab { padding-inline: 11px; }
+            .search { width: 100%; margin-bottom: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <div class="mark" aria-hidden="true">RN</div>
+            <div><strong>RoadNexus</strong><span>Municipal data</span></div>
+        </div>
+        <a href="./index.html">Back to application</a>
+    </header>
+
+    <main>
+        <section class="heading" aria-labelledby="page-title">
+            <div>
+                <p class="eyebrow">SQLITE · LIVE RECORDS</p>
+                <h1 id="page-title">Database explorer</h1>
+                <p class="subhead">Road network, damage reports, locations, and equipment.</p>
+            </div>
+            <div class="actions">
+                <span class="live" id="connection-state" role="status">Connecting</span>
+                <button class="refresh" id="refresh-button" type="button" title="Reload database records">↻ Refresh</button>
+            </div>
+        </section>
+
+        <section class="counts" aria-label="Record counts">
+            <div class="count"><strong id="count-roads">—</strong><span>Roads</span></div>
+            <div class="count"><strong id="count-reports">—</strong><span>Damage reports</span></div>
+            <div class="count"><strong id="count-locations">—</strong><span>Locations</span></div>
+            <div class="count"><strong id="count-equipment">—</strong><span>Equipment items</span></div>
+        </section>
+
+        <section aria-label="Database records">
+            <div class="toolbar">
+                <div class="tabs" role="tablist" aria-label="Database tables">
+                    <button class="tab" id="tab-roads" type="button" role="tab" aria-selected="true" aria-controls="record-panel" data-table="roads">Roads</button>
+                    <button class="tab" id="tab-reports" type="button" role="tab" aria-selected="false" aria-controls="record-panel" data-table="reports">Reports</button>
+                    <button class="tab" id="tab-locations" type="button" role="tab" aria-selected="false" aria-controls="record-panel" data-table="locations">Locations</button>
+                    <button class="tab" id="tab-equipment" type="button" role="tab" aria-selected="false" aria-controls="record-panel" data-table="equipment">Equipment</button>
+                </div>
+                <input class="search" id="search-input" type="search" placeholder="Search records" aria-label="Search current table">
+            </div>
+            <div id="error-message" class="error" role="alert" hidden></div>
+            <div class="table-meta"><span id="table-name">Roads</span><span id="record-count">Loading records…</span></div>
+            <div class="table-wrap" id="record-panel" role="tabpanel" aria-labelledby="tab-roads" tabindex="0">
+                <table>
+                    <thead id="table-head"></thead>
+                    <tbody id="table-body"><tr><td class="empty">Loading database records…</td></tr></tbody>
+                </table>
+            </div>
+            <footer><span>Read-only view of the running local database API</span><span id="last-updated"></span></footer>
+        </section>
+    </main>
+
+    <script>
+        "use strict";
+
+        const API_ROOT = "http://127.0.0.1:8080/api";
+        const tableDefinitions = {
+            roads: { title: "Roads", databaseKey: "roads" },
+            reports: { title: "Damage reports", databaseKey: "damage_reports" },
+            locations: { title: "Locations", databaseKey: "locations" },
+            equipment: { title: "Equipment catalog", databaseKey: "equipment_catalog" }
+        };
+
+        const records = {};
+        const tableColumns = {};
+        let selectedTable = "roads";
+        const tableHead = document.getElementById("table-head");
+        const tableBody = document.getElementById("table-body");
+
+        function cellText(value) {
+            return value === undefined || value === null || value === "" ? "—" : String(value);
+        }
+
+        function renderTable() {
+            const definition = tableDefinitions[selectedTable];
+            const columns = tableColumns[selectedTable] || [];
+            const search = document.getElementById("search-input").value.trim().toLocaleLowerCase();
+            const allRows = records[selectedTable] || [];
+            const visibleRows = allRows.filter(row => Object.values(row).some(value =>
+                cellText(value).toLocaleLowerCase().includes(search)
+            ));
+
+            document.getElementById("table-name").textContent = definition.title;
+            document.getElementById("record-count").textContent = search
+                ? `${visibleRows.length} of ${allRows.length} records`
+                : `${allRows.length} records`;
+            tableHead.replaceChildren();
+            tableBody.replaceChildren();
+
+            const headerRow = document.createElement("tr");
+            for (const column of columns) {
+                const cell = document.createElement("th");
+                cell.scope = "col";
+                cell.textContent = column;
+                headerRow.append(cell);
+            }
+            tableHead.append(headerRow);
+
+            if (visibleRows.length === 0) {
+                const row = document.createElement("tr");
+                const cell = document.createElement("td");
+                cell.colSpan = Math.max(columns.length, 1);
+                cell.className = "empty";
+                cell.textContent = allRows.length ? "No matching records." : "No records in this table.";
+                row.append(cell);
+                tableBody.append(row);
+                return;
+            }
+
+            for (const record of visibleRows) {
+                const row = document.createElement("tr");
+                for (const column of columns) {
+                    const cell = document.createElement("td");
+                    const value = cellText(record[column]);
+                    if (column === "status") {
+                        const badge = document.createElement("span");
+                        badge.className = `status ${value.toLocaleLowerCase()}`;
+                        badge.textContent = value;
+                        cell.append(badge);
+                    } else {
+                        cell.textContent = value;
+                    }
+                    row.append(cell);
+                }
+                tableBody.append(row);
+            }
+        }
+
+        async function loadDatabase() {
+            const connectionState = document.getElementById("connection-state");
+            const errorMessage = document.getElementById("error-message");
+            const refreshButton = document.getElementById("refresh-button");
+            connectionState.textContent = "Refreshing";
+            errorMessage.hidden = true;
+            refreshButton.disabled = true;
+
+            try {
+                const response = await fetch(`${API_ROOT}/database`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const database = await response.json();
+                for (const [key, definition] of Object.entries(tableDefinitions)) {
+                    const table = database[definition.databaseKey];
+                    records[key] = table.rows;
+                    tableColumns[key] = table.columns;
+                    document.getElementById(`count-${key}`).textContent = table.rows.length;
+                }
+                connectionState.textContent = "Live connection";
+                document.getElementById("last-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                connectionState.textContent = "Connection issue";
+                errorMessage.textContent = "Could not load the database. Confirm the Java API is running at localhost:8080, then refresh.";
+                errorMessage.hidden = false;
+            } finally {
+                refreshButton.disabled = false;
+                renderTable();
+            }
+        }
+
+        document.querySelectorAll(".tab").forEach(button => {
+            button.addEventListener("click", () => {
+                selectedTable = button.dataset.table;
+                document.querySelectorAll(".tab").forEach(tab => {
+                    tab.setAttribute("aria-selected", String(tab === button));
+                });
+                document.getElementById("record-panel").setAttribute("aria-labelledby", button.id);
+                renderTable();
+            });
+        });
+
+        document.getElementById("search-input").addEventListener("input", renderTable);
+        document.getElementById("refresh-button").addEventListener("click", loadDatabase);
+        loadDatabase();
+    </script>
+</body>
+</html>
