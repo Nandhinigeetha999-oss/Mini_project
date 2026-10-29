@@ -143,6 +143,7 @@
             <div class="count"><strong id="count-reports">—</strong><span>Damage reports</span></div>
             <div class="count"><strong id="count-locations">—</strong><span>Locations</span></div>
             <div class="count"><strong id="count-equipment">—</strong><span>Equipment items</span></div>
+            <div class="count"><strong id="count-teams">—</strong><span>Maintenance teams</span></div>
         </section>
 
         <section aria-label="Database records">
@@ -152,6 +153,7 @@
                     <button class="tab" id="tab-reports" type="button" role="tab" aria-selected="false" aria-controls="record-panel" data-table="reports">Reports</button>
                     <button class="tab" id="tab-locations" type="button" role="tab" aria-selected="false" aria-controls="record-panel" data-table="locations">Locations</button>
                     <button class="tab" id="tab-equipment" type="button" role="tab" aria-selected="false" aria-controls="record-panel" data-table="equipment">Equipment</button>
+                    <button class="tab" id="tab-teams" type="button" role="tab" aria-selected="false" aria-controls="record-panel" data-table="teams">Teams</button>
                 </div>
                 <input class="search" id="search-input" type="search" placeholder="Search records" aria-label="Search current table">
             </div>
@@ -175,7 +177,8 @@
             roads: { title: "Roads", databaseKey: "roads" },
             reports: { title: "Damage reports", databaseKey: "damage_reports" },
             locations: { title: "Locations", databaseKey: "locations" },
-            equipment: { title: "Equipment catalog", databaseKey: "equipment_catalog" }
+            equipment: { title: "Equipment catalog", databaseKey: "equipment_catalog" },
+            teams: { title: "Maintenance teams", databaseKey: "maintenance_teams" }
         };
 
         const records = {};

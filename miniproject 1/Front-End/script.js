@@ -82,7 +82,60 @@ function loadTeams() {
     return defaultTeams;
 }
 
-const teams = loadTeams();
+let teams = loadTeams();
+
+async function fetchTeamsFromApi() {
+    try {
+        const response = await fetch("http://127.0.0.1:8080/api/teams", { cache: "no-store" });
+        if (response.ok) {
+            const payload = await response.json();
+            if (Array.isArray(payload) && payload.length > 0) {
+                teams = payload.map(function (team) {
+                    return {
+                        id: team.id,
+                        location: team.location,
+                        available: Boolean(team.available),
+                        equipment: Array.isArray(team.equipment) ? team.equipment : []
+                    };
+                });
+                renderTeams();
+                renderJobs();
+            }
+        }
+    } catch (error) {
+        // Fall back to local teams
+    }
+}
+
+async function triggerAutoAllot() {
+    const message = getElement("teamFormMessage");
+    if (message) {
+        message.textContent = "Auto-allotting teams and tools to pending repairs...";
+        message.classList.remove("error");
+    }
+
+    try {
+        const response = await fetch("http://127.0.0.1:8080/api/teams/auto-allot", {
+            method: "POST"
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+        }
+        await fetchTeamsFromApi();
+        await loadReports();
+        if (message) {
+            message.textContent = "Auto-allotment completed! Teams and tools assigned.";
+            message.classList.remove("error");
+        }
+        renderEverything();
+    } catch (error) {
+        if (message) {
+            message.textContent = `Auto-allotment failed: ${error.message}`;
+            message.classList.add("error");
+        }
+    }
+}
 
 function saveTeams() {
     try {
@@ -245,6 +298,7 @@ function startApplication() {
     renderEverything();
     loadRoads();
     loadReports();
+    fetchTeamsFromApi();
 }
 
 /* ---------------------------------
@@ -311,9 +365,9 @@ function showPage(pageName) {
     getElement("pageTitle").textContent = pageTitles[pageName];
 
     if (pageName === "roads") loadRoads();
-    if (pageName === "reports") loadReports();
-    if (pageName === "teams") renderTeams();
-    if (pageName === "jobs") renderJobs();
+    if (pageName === "reports") { loadReports(); fetchTeamsFromApi(); }
+    if (pageName === "teams") { fetchTeamsFromApi(); renderTeams(); }
+    if (pageName === "jobs") { fetchTeamsFromApi(); renderJobs(); }
 
     if (pageName === "dashboard") {
         if (roadMapInstance) {
@@ -805,6 +859,13 @@ function renderReports() {
                 `;
             }
 
+            const teamBadge = report.assignedTeam && report.assignedTeam !== "Unassigned"
+                ? `<span class="status status-active">Team ${escapeHTML(report.assignedTeam)}</span>`
+                : `<span class="status status-pending">Queued</span>`;
+            const toolsDisplay = report.assignedEquipment
+                ? `<span style="font-size: 0.85em; color: #334155;">${escapeHTML(report.assignedEquipment)}</span>`
+                : `<span style="font-size: 0.85em; color: #94a3b8;">—</span>`;
+
             return `
                 <tr>
                     <td class="id-text">${escapeHTML(report.id)}</td>
@@ -813,6 +874,8 @@ function renderReports() {
                     <td>${statusBadge(report.severity)}</td>
                     <td>${statusBadge(report.risk)}</td>
                     <td>${statusBadge(report.status)}</td>
+                    <td>${teamBadge}</td>
+                    <td>${toolsDisplay}</td>
                     <td>${report.submittedAt
                         ? escapeHTML(new Date(report.submittedAt).toLocaleString())
                         : "—"}</td>
@@ -865,6 +928,8 @@ async function saveReportStatus(report, status) {
             reports[index] = mapReport(payload);
         }
         message.textContent = `${report.id} status saved.`;
+        await fetchTeamsFromApi();
+        await loadReports();
         renderEverything();
     } catch (error) {
         message.textContent = `Could not save report status: ${error.message}`;
@@ -927,7 +992,11 @@ getElement("reportForm").addEventListener("submit", async function (event) {
         reports.push(mapReport(payload));
         form.reset();
         reportLoadError = "";
-        message.textContent = `${payload.id} saved to the municipal database.`;
+        const teamInfo = payload.assignedTeam && payload.assignedTeam !== "Unassigned"
+            ? ` Auto-allotted to Team ${payload.assignedTeam} with tools: [${payload.assignedEquipment || 'Standard Tools'}].`
+            : " Placed in pending queue (no teams currently available).";
+        message.textContent = `${payload.id} saved to the municipal database.${teamInfo}`;
+        await fetchTeamsFromApi();
         renderEverything();
     } catch (error) {
         message.textContent = `Could not save report: ${error.message}`;
@@ -1145,18 +1214,18 @@ getElement("teamsGrid").addEventListener("click", function (event) {
 ---------------------------------- */
 
 function renderJobs() {
-    /*
-     * T1 is used as the demo login's assigned team.
-     * A real backend must determine the team from the
-     * authenticated account, not trust browser data.
-     */
+    const userRole = currentUser?.role;
+    const userTeam = currentUser?.initials || "T1";
     const assignedReports = reports.filter(function (report) {
-        return report.assignedTeam === "T1";
+        if (userRole === "engineering") {
+            return report.assignedTeam && report.assignedTeam !== "Unassigned";
+        }
+        return report.assignedTeam === userTeam || (!report.assignedTeam && userTeam === "T1");
     });
 
     if (assignedReports.length === 0) {
         getElement("jobsTable").innerHTML =
-            `<tr><td colspan="6">No assigned repair jobs.</td></tr>`;
+            `<tr><td colspan="7">No assigned repair jobs.</td></tr>`;
         return;
     }
 
@@ -1178,6 +1247,7 @@ function renderJobs() {
                 <td>${escapeHTML(report.id)}</td>
                 <td>${escapeHTML(report.roadId)}</td>
                 <td>${escapeHTML(report.damage)}</td>
+                <td><small style="color: #334155;">${escapeHTML(report.assignedEquipment || 'Standard Kit')}</small></td>
                 <td>${statusBadge(report.status)}</td>
                 <td>${action}</td>
             </tr>
@@ -1326,7 +1396,8 @@ function mapReport(report) {
         importance: report.importance,
         traffic: Number(report.traffic),
         status: report.status,
-        assignedTeam: "T1",
+        assignedTeam: report.assignedTeam || "Unassigned",
+        assignedEquipment: report.assignedEquipment || "",
         submittedAt: report.submittedAt
     };
 }
@@ -1383,6 +1454,7 @@ async function loadRoads() {
         /* Coordinates for the map, markers and route pickers come from the
          * backend location register, never from the browser. */
         await loadLocations();
+        await fetchTeamsFromApi();
 
         const response = await fetch(ROAD_API_URL, {
             cache: "no-store",
@@ -1479,4 +1551,9 @@ async function loadLocations() {
          * road segments that carry their own coordinates still render. */
         locations = Object.keys(locations).length > 0 ? locations : {};
     }
+}
+
+const autoAllotBtn = getElement("autoAllotButton");
+if (autoAllotBtn) {
+    autoAllotBtn.addEventListener("click", triggerAutoAllot);
 }

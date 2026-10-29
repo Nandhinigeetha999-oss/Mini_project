@@ -406,6 +406,7 @@
                                 <tr>
                                     <th>Report ID</th><th>Road</th><th>Damage</th>
                                     <th>Severity</th><th>Risk</th><th>Status</th>
+                                    <th>Allotted Team</th><th>Allotted Tools</th>
                                     <th>Submitted</th><th>Action</th>
                                 </tr>
                             </thead>
@@ -421,8 +422,11 @@
                     <div class="panel-heading">
                         <div>
                             <h3>Maintenance Teams</h3>
-                            <p>Team availability, location and equipment</p>
+                            <p>Team availability, location and equipment (Automated Dispatch)</p>
                         </div>
+                        <button id="autoAllotButton" class="secondary" type="button" style="align-self: center;">
+                            ⚡ Auto-Allot Teams &amp; Tools
+                        </button>
                     </div>
 
                     <div class="team-management">
@@ -479,8 +483,8 @@
                     <div id="teamsGrid" class="teams-grid"></div>
 
                     <div class="note">
-                        <strong>Frontend demo data</strong>
-                        <p>Team and equipment changes are saved in this browser only. They are not written to the Java application or database.</p>
+                        <strong>Automated Maintenance Dispatch</strong>
+                        <p>Teams and tools are automatically fetched and allotted based on damage severity, equipment catalog, and Dijkstra shortest route calculation. All allotments are synchronized with the municipal SQLite database.</p>
                     </div>
                 </section>
             </section>
@@ -500,7 +504,7 @@
                             <thead>
                                 <tr>
                                     <th>Job ID</th><th>Report</th><th>Road</th>
-                                    <th>Damage</th><th>Status</th><th>Demo Action</th>
+                                    <th>Damage</th><th>Allotted Tools</th><th>Status</th><th>Demo Action</th>
                                 </tr>
                             </thead>
                             <tbody id="jobsTable"></tbody>
@@ -508,7 +512,7 @@
                     </div>
 
                     <div class="note">
-                        In the real application, the backend must return only jobs assigned to the authenticated team.
+                        Jobs are automatically allotted to maintenance teams with required tools based on damage analysis and closest proximity.
                     </div>
                 </section>
             </section>

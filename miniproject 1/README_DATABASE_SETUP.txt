@@ -21,15 +21,13 @@ VS Code setup:
 5. If VS Code does not automatically detect the JAR, add it to Java project referenced libraries.
    Alternatively, use a terminal from the project folder:
 
-   Windows PowerShell (run from the folder containing Main.java):
-      javac -cp ".;lib\sqlite-jdbc-<version>.jar" (Get-ChildItem -Filter *.java | ForEach-Object { $_.FullName })
-      java -cp ".;lib\sqlite-jdbc-<version>.jar" Main
+   Windows PowerShell (run from project folder):
+      javac -d classes -cp "classes;lib\sqlite-jdbc-3.46.1.3.jar" (Get-ChildItem -Path src -Filter *.java -Recurse | ForEach-Object { $_.FullName })
+      java -cp "classes;lib\sqlite-jdbc-3.46.1.3.jar" Main
 
-   Linux/macOS (run from the folder containing Main.java):
-      javac -cp ".:lib/sqlite-jdbc-<version>.jar" *.java
-      java -cp ".:lib/sqlite-jdbc-<version>.jar" Main
-
-   Replace <version> with the actual version in the JAR filename.
+   Linux/macOS (run from project folder):
+      javac -d classes -cp "classes:lib/sqlite-jdbc-3.46.1.3.jar" $(find src -name "*.java")
+      java -cp "classes:lib/sqlite-jdbc-3.46.1.3.jar" Main
 
 The database file is created automatically in the working directory the first time the program runs.
 Do not delete smart_road_maintenance.db if you want to keep your saved road network.
