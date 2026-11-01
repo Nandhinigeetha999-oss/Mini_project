@@ -1,10 +1,10 @@
-# Dockerfile for Smart Road Maintenance System
+# Multi-stage build for Smart Municipal Road Maintenance System
 FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
 COPY . .
 
-# Compile Java source code
+# Compile Java source files
 RUN mkdir -p classes && \
     find src -name "*.java" > sources.txt && \
     javac -d classes -cp "classes:lib/*" @sources.txt
@@ -19,7 +19,7 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/Front-End ./Front-End
 COPY --from=builder /app/smart_road_maintenance.db ./smart_road_maintenance.db
 
-# Dynamic port assigned by cloud hosts (Render, Railway, Heroku)
+# Dynamic port assigned by Render ($PORT)
 ENV PORT=8080
 EXPOSE 8080
 
