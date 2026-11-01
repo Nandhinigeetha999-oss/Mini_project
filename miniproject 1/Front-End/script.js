@@ -2,11 +2,20 @@
 
 /* Roads and reports are loaded from the Java API; maintenance teams remain demo data. */
 
-const ROAD_API_URL = "http://127.0.0.1:8080/api/roads";
-const ROUTE_API_URL = "http://127.0.0.1:8080/api/routes";
-const REPORT_API_URL = "http://127.0.0.1:8080/api/reports";
-const LOCATION_API_URL = "http://127.0.0.1:8080/api/locations";
-const COLORING_API_URL = "http://127.0.0.1:8080/api/coloring";
+const API_BASE = (window.location.protocol === "file:" || !window.location.origin || window.location.origin === "null")
+    ? "http://127.0.0.1:8080"
+    : window.location.origin;
+
+const ROAD_API_URL = `${API_BASE}/api/roads`;
+const ROUTE_API_URL = `${API_BASE}/api/routes`;
+const REPORT_API_URL = `${API_BASE}/api/reports`;
+const LOCATION_API_URL = `${API_BASE}/api/locations`;
+const COLORING_API_URL = `${API_BASE}/api/coloring`;
+
+
+
+
+
 
 const users = {
     ward: {

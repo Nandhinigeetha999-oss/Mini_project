@@ -172,7 +172,9 @@
     <script>
         "use strict";
 
-        const API_ROOT = "http://127.0.0.1:8080/api";
+        const API_ROOT = (window.location.protocol === "file:" || !window.location.origin || window.location.origin === "null")
+            ? "http://127.0.0.1:8080/api"
+            : `${window.location.origin}/api`;
         const tableDefinitions = {
             roads: { title: "Roads", databaseKey: "roads" },
             reports: { title: "Damage reports", databaseKey: "damage_reports" },

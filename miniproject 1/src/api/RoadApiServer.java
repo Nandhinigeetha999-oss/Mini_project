@@ -31,9 +31,15 @@ public final class RoadApiServer {
     }
 
     public static void start(int port) {
+        String envPort = System.getenv("PORT");
+        if (envPort != null && !envPort.trim().isEmpty()) {
+            try {
+                port = Integer.parseInt(envPort.trim());
+            } catch (NumberFormatException ignored) { }
+        }
         try {
             HttpServer server = HttpServer.create(
-                    new InetSocketAddress("127.0.0.1", port), 0);
+                    new InetSocketAddress("0.0.0.0", port), 0);
             server.createContext("/api/", RoadApiServer::handleRoads);
             server.createContext("/", RoadApiServer::handleStatic);
             server.setExecutor(Executors.newCachedThreadPool());
