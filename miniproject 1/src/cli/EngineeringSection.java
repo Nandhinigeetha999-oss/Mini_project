@@ -31,7 +31,8 @@ public class EngineeringSection {
             System.out.println("12. Update Damage Report");
             System.out.println("13. View Repair Jobs");
             System.out.println("14. Find fastest route");
-            System.out.println("15. Back");
+            System.out.println("15. Conflict-Free Maintenance Phasing (Graph Coloring)");
+            System.out.println("16. Back");
 
             System.out.print("Enter your choice: ");
             int choice = ConsoleHelper.getMenuChoice();
@@ -94,6 +95,10 @@ public class EngineeringSection {
                     break;
 
                 case 15:
+                    RepairManager.displayConflictFreePhases();
+                    break;
+
+                case 16:
                     return;
 
                 default:

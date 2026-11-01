@@ -133,8 +133,11 @@
                 <button class="nav-link" data-page="jobs"
                     data-roles="team">✓ &nbsp; My Repair Jobs</button>
 
-                <button class="nav-link" data-page="routes"
-                    data-roles="engineering,team">➤ &nbsp; Fastest Route</button>
+                <button class="nav-link" data-page="routes" data-roles="engineering,team">➤ &nbsp; Fastest Route</button>
+
+                <button class="nav-link" data-page="phasing"
+                    data-roles="engineering">⎈ &nbsp; Repair Phasing</button>
+
             </nav>
 
             <div class="sidebar-bottom">
@@ -552,6 +555,34 @@
                     <div class="note">
                         <strong>Route conditions</strong>
                         <p>Routes are calculated by the Java backend and exclude closed roads.</p>
+                    </div>
+                </section>
+            </section>
+
+            <!-- CONFLICT-FREE REPAIR PHASING (GRAPH COLORING) -->
+            <section id="phasingPage" class="page">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h3>Conflict-Free Maintenance Phasing</h3>
+                            <p>Welsh-Powell Graph Coloring applied to intersection conflict network</p>
+                        </div>
+                        <button id="refreshPhasingButton" class="secondary" type="button">↻ Recompute Phases</button>
+                    </div>
+
+                    <div class="phasing-metrics" id="phasingMetrics"></div>
+
+                    <div class="map-container phasing-map-container">
+                        <div id="phasingMap" class="leaflet-map"
+                            role="img" aria-label="Conflict-free phasing map"></div>
+                        <small>Interactive Phase Map — Roads with the same color can be maintained concurrently without intersection conflict</small>
+                    </div>
+
+                    <div id="phasingCards" class="phasing-cards"></div>
+
+                    <div class="note">
+                        <strong>Graph Coloring Theory (Welsh-Powell Line Graph Coloring)</strong>
+                        <p>In this conflict graph, vertices represent road segments and edges connect any two roads sharing a common intersection. The chromatic number (&chi;) represents the minimum number of time slots needed to repair all roads without causing junction gridlock.</p>
                     </div>
                 </section>
             </section>

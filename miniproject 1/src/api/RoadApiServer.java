@@ -17,6 +17,8 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -33,9 +35,11 @@ public final class RoadApiServer {
             HttpServer server = HttpServer.create(
                     new InetSocketAddress("127.0.0.1", port), 0);
             server.createContext("/api/", RoadApiServer::handleRoads);
+            server.createContext("/", RoadApiServer::handleStatic);
             server.setExecutor(Executors.newCachedThreadPool());
             server.start();
             System.out.println("Road API ready at http://localhost:" + port + "/api/roads");
+            System.out.println("Frontend UI ready at http://localhost:" + port + "/");
         } catch (IOException exception) {
             System.err.println("Could not start the Road API on port " + port + ": " + exception.getMessage());
         }
@@ -121,6 +125,11 @@ public final class RoadApiServer {
 
             if ("GET".equalsIgnoreCase(method) && "/api/jobs".equals(path)) {
                 sendJobs(exchange);
+                return;
+            }
+
+            if ("GET".equalsIgnoreCase(method) && "/api/coloring".equals(path)) {
+                sendColoring(exchange);
                 return;
             }
 
@@ -673,4 +682,142 @@ public final class RoadApiServer {
         exchange.getResponseBody().write(response);
         exchange.close();
     }
+
+    private static void sendColoring(HttpExchange exchange) throws IOException, SQLException {
+        ArrayList<Road> roads = DatabaseManager.loadRoads();
+        LinkedHashMap<String, Location> locations = DatabaseManager.loadLocations();
+        routing.GraphColoring.ScheduleResult schedule = routing.GraphColoring.scheduleRoadRepairs(roads);
+        routing.GraphColoring.LocationColoringResult locationColors = routing.GraphColoring.colorLocations(roads);
+
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"chromaticNumber\":").append(schedule.chromaticNumber);
+        json.append(",\"totalRoads\":").append(roads.size());
+
+        json.append(",\"phases\":[");
+        int phaseIdx = 0;
+        for (Map.Entry<Integer, List<Road>> entry : schedule.phaseGroups.entrySet()) {
+            if (phaseIdx > 0) json.append(',');
+            int phase = entry.getKey();
+            List<Road> phaseRoads = entry.getValue();
+            String color = routing.GraphColoring.getColorHex(phase);
+
+            json.append("{\"phase\":").append(phase)
+                .append(",\"name\":\"Phase ").append(phase).append("\"")
+                .append(",\"colorHex\":\"").append(color).append("\"")
+                .append(",\"roadCount\":").append(phaseRoads.size())
+                .append(",\"roads\":[");
+
+            for (int r = 0; r < phaseRoads.size(); r++) {
+                if (r > 0) json.append(',');
+                appendRoad(json, phaseRoads.get(r), locations);
+            }
+            json.append("]}");
+            phaseIdx++;
+        }
+        json.append(']');
+
+        json.append(",\"roadColors\":{");
+        int roadIdx = 0;
+        for (Road road : roads) {
+            if (roadIdx > 0) json.append(',');
+            int phase = schedule.roadToPhase.getOrDefault(road.roadId, 1);
+            String color = schedule.roadToColorHex.getOrDefault(road.roadId, "#10b981");
+            List<String> conflicts = schedule.conflictAdjacency.getOrDefault(road.roadId, Collections.emptyList());
+
+            json.append("\"").append(jsonEscape(road.roadId)).append("\":{")
+                .append("\"phase\":").append(phase)
+                .append(",\"colorHex\":\"").append(color).append("\"")
+                .append(",\"conflicts\":[");
+            for (int c = 0; c < conflicts.size(); c++) {
+                if (c > 0) json.append(',');
+                json.append('"').append(jsonEscape(conflicts.get(c))).append('"');
+            }
+            json.append("]}");
+            roadIdx++;
+        }
+        json.append('}');
+
+        json.append(",\"locationChromaticNumber\":").append(locationColors.chromaticNumber);
+        json.append(",\"locationZones\":[");
+        int locIdx = 0;
+        for (Map.Entry<String, Integer> entry : locationColors.locationToZone.entrySet()) {
+            if (locIdx > 0) json.append(',');
+            json.append("{\"location\":\"").append(jsonEscape(entry.getKey()))
+                .append("\",\"zone\":").append(entry.getValue())
+                .append(",\"colorHex\":\"").append(locationColors.locationToColorHex.get(entry.getKey())).append("\"}");
+            locIdx++;
+        }
+        json.append(']');
+
+        json.append('}');
+        sendJson(exchange, 200, json.toString());
+    }
+
+    private static void handleStatic(HttpExchange exchange) throws IOException {
+        addCorsHeaders(exchange);
+        String method = exchange.getRequestMethod();
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+            return;
+        }
+        if (!"GET".equalsIgnoreCase(method) && !"HEAD".equalsIgnoreCase(method)) {
+            sendJson(exchange, 405, "{\"error\":\"Method not allowed.\"}");
+            return;
+        }
+
+        String rawPath = exchange.getRequestURI().getPath();
+        if (rawPath == null || rawPath.isEmpty() || "/".equals(rawPath)) {
+            rawPath = "/index.html";
+        }
+        if (rawPath.startsWith("/Front-End/")) {
+            rawPath = rawPath.substring("/Front-End".length());
+            if (rawPath.isEmpty() || "/".equals(rawPath)) {
+                rawPath = "/index.html";
+            }
+        }
+
+        rawPath = rawPath.replace('\\', '/');
+        if (rawPath.contains("..")) {
+            sendJson(exchange, 403, "{\"error\":\"Access denied.\"}");
+            return;
+        }
+
+        String relativePath = rawPath.startsWith("/") ? rawPath.substring(1) : rawPath;
+        java.io.File file = new java.io.File("Front-End", relativePath);
+        if (!file.exists() || file.isDirectory()) {
+            file = new java.io.File(relativePath);
+        }
+
+        if (!file.exists() || file.isDirectory()) {
+            sendJson(exchange, 404, "{\"error\":\"Not found.\"}");
+            return;
+        }
+
+        String contentType = getContentType(file.getName());
+        byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+        exchange.getResponseHeaders().set("Content-Type", contentType);
+        exchange.sendResponseHeaders(200, "HEAD".equalsIgnoreCase(method) ? -1 : bytes.length);
+        if (!"HEAD".equalsIgnoreCase(method)) {
+            try (java.io.OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        }
+        exchange.close();
+    }
+
+    private static String getContentType(String filename) {
+        String lower = filename.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html; charset=utf-8";
+        if (lower.endsWith(".css")) return "text/css; charset=utf-8";
+        if (lower.endsWith(".js")) return "application/javascript; charset=utf-8";
+        if (lower.endsWith(".json")) return "application/json; charset=utf-8";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".gif")) return "image/gif";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".ico")) return "image/x-icon";
+        return "application/octet-stream";
+    }
 }
+

@@ -6,6 +6,7 @@ const ROAD_API_URL = "http://127.0.0.1:8080/api/roads";
 const ROUTE_API_URL = "http://127.0.0.1:8080/api/routes";
 const REPORT_API_URL = "http://127.0.0.1:8080/api/reports";
 const LOCATION_API_URL = "http://127.0.0.1:8080/api/locations";
+const COLORING_API_URL = "http://127.0.0.1:8080/api/coloring";
 
 const users = {
     ward: {
@@ -154,7 +155,8 @@ const pageTitles = {
     reports: "Damage Reports",
     teams: "Maintenance Teams",
     jobs: "My Repair Jobs",
-    routes: "Fastest Route"
+    routes: "Fastest Route",
+    phasing: "Conflict-Free Maintenance Phasing"
 };
 
 function getElement(id) {
@@ -374,6 +376,13 @@ function showPage(pageName) {
             roadMapInstance.invalidateSize();
         }
         renderRoadMap();
+    }
+
+    if (pageName === "phasing") {
+        if (phasingMapInstance) {
+            phasingMapInstance.invalidateSize();
+        }
+        loadPhasing();
     }
 
     if (pageName === "routes") {
@@ -1556,4 +1565,187 @@ async function loadLocations() {
 const autoAllotBtn = getElement("autoAllotButton");
 if (autoAllotBtn) {
     autoAllotBtn.addEventListener("click", triggerAutoAllot);
+}
+
+
+/* =========================================================
+   CONFLICT-FREE MAINTENANCE PHASING (GRAPH COLORING)
+   ========================================================= */
+
+let phasingMapInstance = null;
+let phasingMapLayer = null;
+let currentPhasingData = null;
+
+async function loadPhasing() {
+    try {
+        const response = await fetch(COLORING_API_URL);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        currentPhasingData = data;
+        renderPhasing(data);
+    } catch (err) {
+        console.error("Failed to load graph coloring schedule:", err);
+        const container = getElement("phasingMetrics");
+        if (container) {
+            container.innerHTML = `
+                <div class="stat-card" style="grid-column: 1 / -1; border-left: 4px solid #ef4444; color: #b91c1c;">
+                    <strong>Unable to load Graph Coloring phases.</strong>
+                    <p style="margin: 4px 0 0; font-size: 13px;">Confirm that the Java backend API is running at <code>http://127.0.0.1:8080/api/coloring</code>.</p>
+                </div>
+            `;
+        }
+    }
+}
+
+function renderPhasing(data) {
+    if (!data) return;
+
+    // 1. Metric Stat Cards
+    const metricsContainer = getElement("phasingMetrics");
+    if (metricsContainer) {
+        const totalPhases = data.chromaticNumber || 0;
+        const totalRoads = data.totalRoads || 0;
+        const maxConcurrent = data.phases && data.phases.length > 0
+            ? Math.max(...data.phases.map(function (p) { return p.roadCount || 0; }))
+            : 0;
+        const parallelSpeedup = totalPhases > 0 ? (totalRoads / totalPhases).toFixed(1) : "1.0";
+
+        metricsContainer.innerHTML = `
+            <div class="stat-card">
+                <div><span>CHROMATIC NUMBER (&chi;)</span><i class="stat-icon blue">🎨</i></div>
+                <h2>${totalPhases} <small style="font-size: 14px; font-weight: normal; color: #64748b;">Phases</small></h2>
+                <small>Optimal conflict-free time slots</small>
+            </div>
+            <div class="stat-card">
+                <div><span>TOTAL ROADS ANALYZED</span><i class="stat-icon blue">🛣</i></div>
+                <h2>${totalRoads}</h2>
+                <small>Intersection conflict graph</small>
+            </div>
+            <div class="stat-card">
+                <div><span>MAX CONCURRENT REPAIRS</span><i class="stat-icon blue">⚡</i></div>
+                <h2>${maxConcurrent} <small style="font-size: 14px; font-weight: normal; color: #64748b;">Roads</small></h2>
+                <small>Parallel jobs without gridlock</small>
+            </div>
+            <div class="stat-card">
+                <div><span>PARALLEL EFFICIENCY</span><i class="stat-icon blue">📈</i></div>
+                <h2>${parallelSpeedup}x</h2>
+                <small>Average repairs per phase</small>
+            </div>
+        `;
+    }
+
+    // 2. Phase Cards
+    const cardsContainer = getElement("phasingCards");
+    if (cardsContainer) {
+        cardsContainer.innerHTML = (data.phases || []).map(function (phase) {
+            const roadRows = (phase.roads || []).map(function (road) {
+                const conflicts = (data.roadColors && data.roadColors[road.id] && data.roadColors[road.id].conflicts) || [];
+                const conflictHint = conflicts.length > 0 ? `Conflicts: ${conflicts.join(", ")}` : "No conflicts";
+
+                return `
+                    <li class="phase-road-item" title="${escapeHTML(conflictHint)}">
+                        <div>
+                            <span class="phase-road-id">${escapeHTML(road.id)}</span>
+                            <span style="margin-left: 8px; color: #334155; font-weight: 500;">
+                                ${escapeHTML(road.from)} &harr; ${escapeHTML(road.to)}
+                            </span>
+                        </div>
+                        <span style="font-size: 12px; color: #64748b; font-weight: 600;">
+                            ${road.time} min
+                        </span>
+                    </li>
+                `;
+            }).join("");
+
+            return `
+                <div class="phase-card" style="--phase-color: ${phase.colorHex};">
+                    <div class="phase-card-header">
+                        <span class="phase-pill" style="background: ${phase.colorHex};">
+                            ${escapeHTML(phase.name)}
+                        </span>
+                        <span style="font-size: 13px; font-weight: 600; color: #475569;">
+                            ${phase.roadCount} Concurrent ${phase.roadCount === 1 ? "Road" : "Roads"}
+                        </span>
+                    </div>
+                    <ul class="phase-road-list">
+                        ${roadRows}
+                    </ul>
+                </div>
+            `;
+        }).join("");
+    }
+
+    // 3. Leaflet Phase Map
+    renderPhasingMap(data);
+}
+
+function renderPhasingMap(data) {
+    const mapElement = getElement("phasingMap");
+    if (!mapElement || typeof L === "undefined") return;
+
+    if (!phasingMapInstance) {
+        phasingMapInstance = createMap("phasingMap");
+    }
+
+    if (!phasingMapInstance) return;
+
+    phasingMapInstance.invalidateSize();
+
+    if (phasingMapLayer) {
+        phasingMapInstance.removeLayer(phasingMapLayer);
+    }
+
+    phasingMapLayer = L.featureGroup();
+    const roadColors = data.roadColors || {};
+
+    (data.phases || []).forEach(function (phase) {
+        (phase.roads || []).forEach(function (road) {
+            const a = roadEndpointCoords(road, "from");
+            const b = roadEndpointCoords(road, "to");
+            if (!a || !b) return;
+
+            const color = phase.colorHex || "#10b981";
+            const segment = L.polyline([a, b], {
+                color: color,
+                weight: 6,
+                opacity: 0.95,
+                lineCap: "round"
+            });
+
+            const conflicts = (roadColors[road.id] && roadColors[road.id].conflicts) || [];
+            segment.bindTooltip(`
+                <div style="font-family: inherit; font-size: 12px;">
+                    <strong style="color:${color};">${escapeHTML(road.id)} · ${escapeHTML(phase.name)}</strong><br>
+                    <span>${escapeHTML(road.from)} &harr; ${escapeHTML(road.to)} (${road.time} min)</span><br>
+                    <small style="color: #64748b;">Adjacent Conflicts: ${escapeHTML(conflicts.join(", ") || "None")}</small>
+                </div>
+            `, { sticky: true });
+
+            phasingMapLayer.addLayer(segment);
+        });
+    });
+
+    getLocationNames().forEach(function (name) {
+        const point = getLocationCoords(name);
+        if (!point) return;
+
+        const marker = L.circleMarker(point, {
+            radius: 6,
+            color: "#0f172a",
+            weight: 2,
+            fillColor: "#ffffff",
+            fillOpacity: 1
+        });
+        marker.bindTooltip(`<b>${escapeHTML(name)}</b><br><small>Junction / Intersection</small>`, { sticky: true });
+        phasingMapLayer.addLayer(marker);
+    });
+
+    phasingMapLayer.addTo(phasingMapInstance);
+}
+
+const refreshPhasingBtn = getElement("refreshPhasingButton");
+if (refreshPhasingBtn) {
+    refreshPhasingBtn.addEventListener("click", loadPhasing);
 }

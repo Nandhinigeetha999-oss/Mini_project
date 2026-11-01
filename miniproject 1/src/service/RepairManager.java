@@ -10,9 +10,13 @@ import model.PotholeRepair;
 import model.RepairJob;
 import model.ResurfacingRepair;
 import model.RoadCrackRepair;
+import model.Road;
 import model.RoadDamage;
 import policy.RepairPriorityPolicy;
 import routing.Dijkstra;
+import routing.GraphColoring;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Handles automated repair prioritization, automatic team matching with Dijkstra,
@@ -362,5 +366,44 @@ public class RepairManager {
         try {
             DatabaseManager.saveOrUpdateMaintenanceTeam(team);
         } catch (SQLException ignored) { }
+    }
+
+    /**
+     * Calculates the conflict-free maintenance schedule for all roads using Graph Coloring.
+     */
+    public static GraphColoring.ScheduleResult getConflictFreeSchedule() {
+        return GraphColoring.scheduleRoadRepairs(Main.roadNetwork.roads);
+    }
+
+    /**
+     * Displays the conflict-free maintenance phases in the console.
+     */
+    public static void displayConflictFreePhases() {
+        GraphColoring.ScheduleResult result = getConflictFreeSchedule();
+
+        System.out.println("\n=======================================================");
+        System.out.println(" CONFLICT-FREE ROAD MAINTENANCE PHASING (GRAPH COLORING)");
+        System.out.println("=======================================================");
+        System.out.println("Total Roads Analyzed    : " + Main.roadNetwork.roads.size());
+        System.out.println("Chromatic Number (Chi)  : " + result.chromaticNumber + " Distinct Phases");
+        System.out.println("Algorithm Heuristic     : Welsh-Powell (First-Fit on Degree Ordering)");
+        System.out.println("Constraint              : No two roads sharing an intersection");
+        System.out.println("                          are scheduled in the same phase.");
+
+        for (Map.Entry<Integer, List<Road>> entry : result.phaseGroups.entrySet()) {
+            int phase = entry.getKey();
+            List<Road> roadsInPhase = entry.getValue();
+            String colorHex = GraphColoring.getColorHex(phase);
+
+            System.out.println("\n-------------------------------------------------------");
+            System.out.println(" PHASE " + phase + " [Color: " + colorHex + "] - " + roadsInPhase.size() + " Road(s) Concurrent");
+            System.out.println("-------------------------------------------------------");
+
+            for (Road r : roadsInPhase) {
+                System.out.println(String.format("  • %-6s : %-20s <---> %-20s (%d mins)",
+                        r.roadId, r.from, r.to, r.travelTime));
+            }
+        }
+        System.out.println("=======================================================");
     }
 }
