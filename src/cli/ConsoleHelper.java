@@ -13,6 +13,9 @@ public final class ConsoleHelper {
 
     public static int getMenuChoice() {
         while (!Main.sc.hasNextInt()) {
+            if (!Main.sc.hasNext()) {
+                throw new java.util.NoSuchElementException("EOF reached on console input");
+            }
             System.out.println("\nInvalid input. Please enter a number.");
             Main.sc.nextLine();
             System.out.print("Enter your choice: ");
@@ -23,6 +26,9 @@ public final class ConsoleHelper {
     public static int readRating(String prompt) {
         while (true) {
             System.out.print(prompt);
+            if (!Main.sc.hasNext()) {
+                throw new java.util.NoSuchElementException("EOF reached on console input");
+            }
             if (Main.sc.hasNextInt()) {
                 int value = Main.sc.nextInt();
                 if (value >= 1 && value <= 3) {

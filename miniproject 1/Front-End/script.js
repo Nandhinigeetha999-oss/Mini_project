@@ -257,7 +257,7 @@ let teams = loadTeams();
 
 async function fetchTeamsFromApi() {
     try {
-        const response = await fetch("http://127.0.0.1:8080/api/teams", { cache: "no-store" });
+        const response = await fetch(`${API_BASE}/api/teams`, { cache: "no-store" });
         if (response.ok) {
             const payload = await response.json();
             if (Array.isArray(payload) && payload.length > 0) {
@@ -286,7 +286,7 @@ async function triggerAutoAllot() {
     }
 
     try {
-        const response = await fetch("http://127.0.0.1:8080/api/teams/auto-allot", {
+        const response = await fetch(`${API_BASE}/api/teams/auto-allot`, {
             method: "POST"
         });
         const payload = await response.json();
@@ -957,10 +957,13 @@ async function updateRoadClosure(road) {
         renderEverything();
         renderRoads(getElement("roadSearch").value);
     } catch (error) {
+        road.closed = closed;
         if (status) {
-            status.textContent = `Could not save road status: ${error.message}`;
-            status.classList.add("error");
+            status.textContent = "[Demo Mode] " + road.id + " marked as " + (closed ? "closed" : "open") + " locally.";
+            status.classList.remove("error");
         }
+        renderEverything();
+        renderRoads(getElement("roadSearch").value);
     }
 }
 
@@ -1111,9 +1114,10 @@ async function saveReportStatus(report, status) {
         await loadReports();
         renderEverything();
     } catch (error) {
-        message.textContent = `Could not save report status: ${error.message}`;
-        message.classList.add("error");
-        renderReports();
+        report.status = status;
+        message.textContent = "[Demo Mode] " + report.id + " status marked as " + status + " locally.";
+        message.classList.remove("error");
+        renderEverything();
     }
 }
 
@@ -1178,7 +1182,27 @@ getElement("reportForm").addEventListener("submit", async function (event) {
         await fetchTeamsFromApi();
         renderEverything();
     } catch (error) {
-        message.textContent = `Could not save report: ${error.message}`;
+        const roadId = getElement("reportRoad").value;
+        const damageType = getElement("damageType").value;
+        const newRep = {
+            id: "D" + String(reports.length + 1).padStart(3, "0"),
+            roadId: roadId,
+            damageType: damageType,
+            severity: getElement("severity").value,
+            risk: getElement("accidentRisk").value,
+            importance: getElement("roadImportance").value,
+            trafficRank: Number(getElement("trafficRank").value) || 1,
+            score: (Number(getElement("severity").value) || 1) * 3,
+            status: "ACTIVE",
+            assignedTeam: "T1",
+            assignedEquipment: "Pothole Kit",
+            repairPlan: "Standard repair for " + damageType
+        };
+        reports.push(newRep);
+        form.reset();
+        message.textContent = "[Demo Mode] " + newRep.id + " recorded locally and assigned to Team T1.";
+        message.classList.remove("error");
+        renderEverything();
     } finally {
         submitButton.disabled = false;
     }
@@ -1255,7 +1279,7 @@ async function loadEquipmentOptions(damageType) {
     equipmentSelect.innerHTML = '<option value="">Select equipment</option>';
 
     try {
-        const response = await fetch(`http://127.0.0.1:8080/api/equipment${query}`, { cache: "no-store" });
+        const response = await fetch(`${API_BASE}/api/equipment${query}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok) {
@@ -1338,7 +1362,7 @@ getElement("equipmentForm").addEventListener("submit", async function (event) {
     }
 
     try {
-        const response = await fetch("http://127.0.0.1:8080/api/equipment", {
+        const response = await fetch(`${API_BASE}/api/equipment`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
             body: new URLSearchParams({ damageType, equipmentName })
@@ -1623,14 +1647,8 @@ async function loadReports() {
         }
         reportLoadError = "";
         if (message && currentUser) {
-            message.textContent = `Demo Mode (Static GitHub Pages) · ${reports.length} report(s) loaded.`;
+            message.textContent = "Demo Mode (Static Preview) · " + reports.length + " report(s) loaded.";
             message.classList.remove("error");
-        }
-        renderEverything();
-        return;
-        if (message && currentUser) {
-            message.textContent = `Cannot load saved reports: ${error.message}`;
-            message.classList.add("error");
         }
     }
 
@@ -1699,27 +1717,22 @@ async function loadRoads() {
             status.classList.remove("error");
         }
     } catch (error) {
-        locations = DEFAULT_LOCATIONS;
+        locations = Object.keys(locations).length > 0 ? locations : DEFAULT_LOCATIONS;
         roads = DEFAULT_ROADS.map(r => ({ ...r }));
         roadLoadError = "";
         if (status) {
-            status.textContent = `Demo Mode (Static GitHub Pages) · ${roads.length} roads loaded`;
+            status.textContent = "Demo Mode (Static Preview) · " + roads.length + " roads loaded";
             status.classList.remove("error");
         }
-        return;
-        locations = {};
-        roadLoadError = error.name === "AbortError"
-            ? "The Road API did not respond within 8 seconds."
-            : error.message;
-        if (status) {
-            status.textContent = `Cannot load roads: ${roadLoadError} Start the Java application with the SQLite JDBC driver.`;
-            status.classList.add("error");
+        if (badge) {
+            badge.textContent = "ROAD DB: DEMO MODE";
+            badge.className = "status-badge demo-badge database-demo";
         }
     } finally {
         clearTimeout(timeoutId);
     }
 
-    if (badge) {
+    if (badge && !badge.textContent.includes("DEMO")) {
         badge.textContent = roadLoadError ? "ROAD DB: OFFLINE" : "ROAD DB: CONNECTED";
         badge.classList.toggle("database-offline", Boolean(roadLoadError));
     }
@@ -1787,16 +1800,6 @@ async function loadPhasing() {
     } catch (err) {
         currentPhasingData = DEFAULT_PHASING_DATA;
         renderPhasing(DEFAULT_PHASING_DATA);
-        return;
-        const container = getElement("phasingMetrics");
-        if (container) {
-            container.innerHTML = `
-                <div class="stat-card" style="grid-column: 1 / -1; border-left: 4px solid #ef4444; color: #b91c1c;">
-                    <strong>Unable to load Graph Coloring phases.</strong>
-                    <p style="margin: 4px 0 0; font-size: 13px;">Confirm that the Java backend API is running at <code>http://127.0.0.1:8080/api/coloring</code>.</p>
-                </div>
-            `;
-        }
     }
 }
 

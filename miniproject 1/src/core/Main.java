@@ -99,38 +99,86 @@ public class Main {
 
     public static void main(String[] args) {
         RoadApiServer.start(8080);
-           
-        while (true) {
 
-            System.out.println("\n==========================================");
-            System.out.println(" SMART MUNICIPAL ROAD MAINTENANCE SYSTEM");
-            System.out.println("          SENTHAMIZH NAGAR");
-            System.out.println("==========================================");
-
-            System.out.println("1. Engineering Section");
-            System.out.println("2. Ward Officer");
-            System.out.println("3. Exit");
-
-            System.out.print("Enter your choice: ");
-            int choice = ConsoleHelper.getMenuChoice();
-            
-            switch (choice) {
-
-                case 1:
-                    engineeringMenu();
+        boolean isExplicitServer = false;
+        if (args != null) {
+            for (String arg : args) {
+                if ("--server".equalsIgnoreCase(arg) || "headless".equalsIgnoreCase(arg) || "-s".equalsIgnoreCase(arg)) {
+                    isExplicitServer = true;
                     break;
+                }
+            }
+        }
 
-                case 2:
-                    wardOfficerMenu();
-                    break;
+        // Detect headless/container environment (Render, Railway, Docker, or non-interactive console)
+        if (isExplicitServer || "true".equalsIgnoreCase(System.getenv("RENDER")) || System.getenv("PORT") != null || System.console() == null) {
+            boolean hasInteractiveInput = false;
+            try {
+                if (System.in != null && System.in.available() > 0) {
+                    hasInteractiveInput = true;
+                }
+            } catch (Exception ignored) { }
 
-                case 3:
-                    System.out.println("\nApplication closed.");
-                    sc.close();
+            if (!hasInteractiveInput || isExplicitServer) {
+                System.out.println("Running in headless server mode. Road API and Web UI are active.");
+                try {
+                    Thread.currentThread().join();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return;
+            }
+        }
+
+        try {
+            while (true) {
+                if (!sc.hasNext()) {
+                    System.out.println("Console input stream closed. Maintaining Road API server in background mode.");
+                    try {
+                        Thread.currentThread().join();
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
                     return;
+                }
 
-                default:
-                    System.out.println("\nInvalid choice.");
+                System.out.println("\n==========================================");
+                System.out.println(" SMART MUNICIPAL ROAD MAINTENANCE SYSTEM");
+                System.out.println("          SENTHAMIZH NAGAR");
+                System.out.println("==========================================");
+
+                System.out.println("1. Engineering Section");
+                System.out.println("2. Ward Officer");
+                System.out.println("3. Exit");
+
+                System.out.print("Enter your choice: ");
+                int choice = ConsoleHelper.getMenuChoice();
+                
+                switch (choice) {
+
+                    case 1:
+                        engineeringMenu();
+                        break;
+
+                    case 2:
+                        wardOfficerMenu();
+                        break;
+
+                    case 3:
+                        System.out.println("\nApplication closed.");
+                        sc.close();
+                        return;
+
+                    default:
+                        System.out.println("\nInvalid choice.");
+                }
+            }
+        } catch (java.util.NoSuchElementException | IllegalStateException e) {
+            System.out.println("Console input ended. Maintaining Road API server in headless mode.");
+            try {
+                Thread.currentThread().join();
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
             }
         }
     }

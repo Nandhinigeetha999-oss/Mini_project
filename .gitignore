@@ -1,0 +1,6 @@
+# Ignore compiled root classes (compiled in Docker container)
+/classes/
+*.log
+.DS_Store
+.idea/
+.vscode/

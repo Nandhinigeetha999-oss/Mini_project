@@ -17,10 +17,15 @@ WORKDIR /app
 COPY --from=builder /app/classes ./classes
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/Front-End ./Front-End
+COPY --from=builder /app/index.html ./index.html
+COPY --from=builder /app/script.js ./script.js
+COPY --from=builder /app/style.css ./style.css
+COPY --from=builder /app/database.html ./database.html
+COPY --from=builder /app/vendor ./vendor
 COPY --from=builder /app/smart_road_maintenance.db ./smart_road_maintenance.db
 
 # Dynamic port assigned by Render ($PORT)
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["java", "-cp", "classes:lib/*", "Main"]
+CMD ["java", "-cp", "classes:lib/*", "Main", "--server"]

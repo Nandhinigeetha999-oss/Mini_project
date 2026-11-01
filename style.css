@@ -424,6 +424,11 @@ input:focus, select:focus {
     border-radius: 6px;
 }
 
+.demo-badge.database-demo {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
 .demo-badge.database-offline {
     background: #ffeaec;
     color: #bd3744;

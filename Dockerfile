@@ -28,4 +28,4 @@ COPY --from=builder /app/smart_road_maintenance.db ./smart_road_maintenance.db
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["java", "-cp", "classes:lib/*", "Main"]
+CMD ["java", "-cp", "classes:lib/*", "Main", "--server"]
