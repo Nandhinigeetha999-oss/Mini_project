@@ -45,6 +45,167 @@ const reports = [];
 let roadLoadError = "";
 let reportLoadError = "";
 
+const DEFAULT_LOCATIONS = {
+    "Municipal Office": { lat: 13.075529, lng: 80.258186 },
+    "Market Junction": { lat: 13.083090, lng: 80.258186 },
+    "Government School": { lat: 13.081383, lng: 80.263886 },
+    "City Hospital": { lat: 13.081139, lng: 80.271257 },
+    "Bus Stand": { lat: 13.075529, lng: 80.270529 },
+    "Railway Station": { lat: 13.075529, lng: 80.278714 },
+    "Main Park": { lat: 13.089871, lng: 80.259043 },
+    "Sports Ground": { lat: 13.089871, lng: 80.266800 },
+    "Water Tank": { lat: 13.089871, lng: 80.275414 },
+    "Industrial Estate": { lat: 13.089871, lng: 80.283214 },
+    "Bypass Junction": { lat: 13.082798, lng: 80.282486 },
+    "Post Office": { lat: 13.075529, lng: 80.261829 },
+    "Library": { lat: 13.075529, lng: 80.264271 },
+    "Fire Station": { lat: 13.085529, lng: 80.277429 },
+    "Police Station": { lat: 13.085920, lng: 80.283214 }
+};
+
+const DEFAULT_ROADS = [
+    { id: "R001", from: "Municipal Office", to: "Market Junction", time: 4, closed: false, fromLat: 13.075529, fromLng: 80.258186, toLat: 13.083090, toLng: 80.258186 },
+    { id: "R002", from: "Market Junction", to: "Government School", time: 3, closed: false, fromLat: 13.083090, fromLng: 80.258186, toLat: 13.081383, toLng: 80.263886 },
+    { id: "R003", from: "Government School", to: "City Hospital", time: 5, closed: false, fromLat: 13.081383, fromLng: 80.263886, toLat: 13.081139, toLng: 80.271257 },
+    { id: "R004", from: "City Hospital", to: "Bus Stand", time: 4, closed: false, fromLat: 13.081139, fromLng: 80.271257, toLat: 13.075529, toLng: 80.270529 },
+    { id: "R005", from: "Bus Stand", to: "Railway Station", time: 6, closed: false, fromLat: 13.075529, fromLng: 80.270529, toLat: 13.075529, toLng: 80.278714 },
+    { id: "R006", from: "Market Junction", to: "Main Park", time: 4, closed: false, fromLat: 13.083090, fromLng: 80.258186, toLat: 13.089871, toLng: 80.259043 },
+    { id: "R007", from: "Main Park", to: "Sports Ground", time: 3, closed: false, fromLat: 13.089871, fromLng: 80.259043, toLat: 13.089871, toLng: 80.266800 },
+    { id: "R008", from: "Sports Ground", to: "Water Tank", time: 5, closed: false, fromLat: 13.089871, fromLng: 80.266800, toLat: 13.089871, toLng: 80.275414 },
+    { id: "R009", from: "Water Tank", to: "Industrial Estate", time: 6, closed: false, fromLat: 13.089871, fromLng: 80.275414, toLat: 13.089871, toLng: 80.283214 },
+    { id: "R010", from: "Industrial Estate", to: "Bypass Junction", time: 5, closed: false, fromLat: 13.089871, fromLng: 80.283214, toLat: 13.082798, toLng: 80.282486 },
+    { id: "R011", from: "Municipal Office", to: "Post Office", time: 3, closed: false, fromLat: 13.075529, fromLng: 80.258186, toLat: 13.075529, toLng: 80.261829 },
+    { id: "R012", from: "Post Office", to: "Library", time: 2, closed: false, fromLat: 13.075529, fromLng: 80.261829, toLat: 13.075529, toLng: 80.264271 },
+    { id: "R013", from: "Library", to: "Government School", time: 3, closed: false, fromLat: 13.075529, fromLng: 80.264271, toLat: 13.081383, toLng: 80.263886 },
+    { id: "R014", from: "Post Office", to: "Bus Stand", time: 5, closed: false, fromLat: 13.075529, fromLng: 80.261829, toLat: 13.075529, toLng: 80.270529 },
+    { id: "R015", from: "City Hospital", to: "Fire Station", time: 3, closed: false, fromLat: 13.081139, fromLng: 80.271257, toLat: 13.085529, toLng: 80.277429 },
+    { id: "R016", from: "Fire Station", to: "Police Station", time: 2, closed: false, fromLat: 13.085529, fromLng: 80.277429, toLat: 13.085920, toLng: 80.283214 },
+    { id: "R017", from: "Police Station", to: "Bypass Junction", time: 6, closed: false, fromLat: 13.085920, fromLng: 80.283214, toLat: 13.082798, toLng: 80.282486 },
+    { id: "R018", from: "Railway Station", to: "Bypass Junction", time: 7, closed: false, fromLat: 13.075529, fromLng: 80.278714, toLat: 13.082798, toLng: 80.282486 },
+    { id: "R019", from: "Water Tank", to: "Fire Station", time: 7, closed: false, fromLat: 13.089871, fromLng: 80.275414, toLat: 13.085529, toLng: 80.277429 }
+];
+
+const DEFAULT_PHASING_DATA = {
+    chromaticNumber: 4,
+    totalRoads: 19,
+    phases: [
+        { phase: 1, name: "Phase 1", colorHex: "#10b981", roadCount: 6, roads: DEFAULT_ROADS.filter(r => ["R002", "R004", "R007", "R010", "R011", "R019"].includes(r.id)) },
+        { phase: 2, name: "Phase 2", colorHex: "#3b82f6", roadCount: 6, roads: DEFAULT_ROADS.filter(r => ["R001", "R003", "R008", "R014", "R016", "R018"].includes(r.id)) },
+        { phase: 3, name: "Phase 3", colorHex: "#f59e0b", roadCount: 6, roads: DEFAULT_ROADS.filter(r => ["R005", "R006", "R009", "R012", "R015", "R017"].includes(r.id)) },
+        { phase: 4, name: "Phase 4", colorHex: "#8b5cf6", roadCount: 1, roads: DEFAULT_ROADS.filter(r => ["R013"].includes(r.id)) }
+    ],
+    roadColors: {
+        R001: { phase: 2, colorHex: "#3b82f6", conflicts: ["R002", "R006", "R011"] },
+        R002: { phase: 1, colorHex: "#10b981", conflicts: ["R001", "R003", "R006", "R013"] },
+        R003: { phase: 2, colorHex: "#3b82f6", conflicts: ["R002", "R004", "R013", "R015"] },
+        R004: { phase: 1, colorHex: "#10b981", conflicts: ["R003", "R005", "R014", "R015"] },
+        R005: { phase: 3, colorHex: "#f59e0b", conflicts: ["R004", "R014", "R018"] },
+        R006: { phase: 3, colorHex: "#f59e0b", conflicts: ["R001", "R002", "R007"] },
+        R007: { phase: 1, colorHex: "#10b981", conflicts: ["R006", "R008"] },
+        R008: { phase: 2, colorHex: "#3b82f6", conflicts: ["R007", "R009", "R019"] },
+        R009: { phase: 3, colorHex: "#f59e0b", conflicts: ["R008", "R010", "R019"] },
+        R010: { phase: 1, colorHex: "#10b981", conflicts: ["R009", "R017", "R018"] },
+        R011: { phase: 1, colorHex: "#10b981", conflicts: ["R001", "R012", "R014"] },
+        R012: { phase: 3, colorHex: "#f59e0b", conflicts: ["R011", "R013", "R014"] },
+        R013: { phase: 4, colorHex: "#8b5cf6", conflicts: ["R002", "R003", "R012"] },
+        R014: { phase: 2, colorHex: "#3b82f6", conflicts: ["R004", "R005", "R011", "R012"] },
+        R015: { phase: 3, colorHex: "#f59e0b", conflicts: ["R003", "R004", "R016", "R019"] },
+        R016: { phase: 2, colorHex: "#3b82f6", conflicts: ["R015", "R017", "R019"] },
+        R017: { phase: 3, colorHex: "#f59e0b", conflicts: ["R010", "R016", "R018"] },
+        R018: { phase: 2, colorHex: "#3b82f6", conflicts: ["R005", "R010", "R017"] },
+        R019: { phase: 1, colorHex: "#10b981", conflicts: ["R008", "R009", "R015", "R016"] }
+    }
+};
+
+const DEFAULT_REPORTS = [
+    {
+        reportId: "DR001",
+        roadId: "R004",
+        damageType: "Pothole",
+        location: "City Hospital",
+        startLocation: "City Hospital",
+        endLocation: "Bus Stand",
+        roadTravelTime: 4,
+        severity: 3,
+        accidentRisk: 3,
+        roadImportance: 3,
+        trafficRank: 2,
+        priorityScore: 3.5,
+        status: "Active",
+        assignedTeam: "T1",
+        assignedEquipment: "Pothole Kit",
+        submittedAt: "2026-11-01 10:30"
+    },
+    {
+        reportId: "DR002",
+        roadId: "R001",
+        damageType: "Road Crack",
+        location: "Municipal Office",
+        startLocation: "Municipal Office",
+        endLocation: "Market Junction",
+        roadTravelTime: 4,
+        severity: 2,
+        accidentRisk: 2,
+        roadImportance: 3,
+        trafficRank: 3,
+        priorityScore: 2.8,
+        status: "Pending",
+        assignedTeam: "Unassigned",
+        assignedEquipment: "Road Cutter",
+        submittedAt: "2026-11-01 11:15"
+    }
+];
+
+function calculateDijkstraClientSide(startNode, destNode) {
+    const adj = {};
+    roads.forEach(r => {
+        if (r.closed) return;
+        if (!adj[r.from]) adj[r.from] = [];
+        if (!adj[r.to]) adj[r.to] = [];
+        adj[r.from].push({ node: r.to, time: r.time });
+        adj[r.to].push({ node: r.from, time: r.time });
+    });
+
+    const dist = {};
+    const prev = {};
+    const unvisited = new Set(Object.keys(DEFAULT_LOCATIONS));
+
+    unvisited.forEach(n => dist[n] = Infinity);
+    dist[startNode] = 0;
+
+    while (unvisited.size > 0) {
+        let curr = null;
+        let minDist = Infinity;
+        unvisited.forEach(n => {
+            if (dist[n] < minDist) {
+                minDist = dist[n];
+                curr = n;
+            }
+        });
+        if (!curr || minDist === Infinity || curr === destNode) break;
+        unvisited.delete(curr);
+
+        (adj[curr] || []).forEach(edge => {
+            if (unvisited.has(edge.node)) {
+                const alt = dist[curr] + edge.time;
+                if (alt < dist[edge.node]) {
+                    dist[edge.node] = alt;
+                    prev[edge.node] = curr;
+                }
+            }
+        });
+    }
+
+    if (dist[destNode] === Infinity || dist[destNode] === undefined) return null;
+    const path = [];
+    let u = destNode;
+    while (u) {
+        path.unshift(u);
+        u = prev[u];
+    }
+    return { path: path.join(" -> "), time: dist[destNode] };
+}
+
 const defaultTeams = [
     {
         id: "T1",
@@ -1368,6 +1529,19 @@ getElement("routeForm").addEventListener("submit", async function (event) {
         renderRouteMap();
         renderRoadMap();
     } catch (error) {
+        const local = calculateDijkstraClientSide(start, destination);
+        if (local) {
+            currentRoutePath = String(local.path || "").split(" -> ").map(s => s.trim()).filter(Boolean);
+            resultBox.innerHTML = `
+                <strong>Fastest reachable route found</strong>
+                <p>${escapeHTML(local.path)}</p>
+                <p><strong>Estimated travel time:</strong> ${Number(local.time)} minutes</p>
+                <p>Closed roads are excluded from this calculation.</p>
+            `;
+            renderRouteMap();
+            renderRoadMap();
+            return;
+        }
         currentRoutePath = [];
         renderRouteMap();
         renderRoadMap();
@@ -1444,7 +1618,16 @@ async function loadReports() {
             message.textContent = `${reports.length} saved report(s) loaded.`;
         }
     } catch (error) {
-        reportLoadError = error.message;
+        if (reports.length === 0) {
+            reports.splice(0, reports.length, ...DEFAULT_REPORTS.map(mapReport));
+        }
+        reportLoadError = "";
+        if (message && currentUser) {
+            message.textContent = `Demo Mode (Static GitHub Pages) · ${reports.length} report(s) loaded.`;
+            message.classList.remove("error");
+        }
+        renderEverything();
+        return;
         if (message && currentUser) {
             message.textContent = `Cannot load saved reports: ${error.message}`;
             message.classList.add("error");
@@ -1516,7 +1699,14 @@ async function loadRoads() {
             status.classList.remove("error");
         }
     } catch (error) {
-        roads = [];
+        locations = DEFAULT_LOCATIONS;
+        roads = DEFAULT_ROADS.map(r => ({ ...r }));
+        roadLoadError = "";
+        if (status) {
+            status.textContent = `Demo Mode (Static GitHub Pages) · ${roads.length} roads loaded`;
+            status.classList.remove("error");
+        }
+        return;
         locations = {};
         roadLoadError = error.name === "AbortError"
             ? "The Road API did not respond within 8 seconds."
@@ -1567,7 +1757,7 @@ async function loadLocations() {
     } catch (error) {
         /* Keep whatever is already in the register if the API is down;
          * road segments that carry their own coordinates still render. */
-        locations = Object.keys(locations).length > 0 ? locations : {};
+        locations = Object.keys(locations).length > 0 ? locations : DEFAULT_LOCATIONS;
     }
 }
 
@@ -1595,7 +1785,9 @@ async function loadPhasing() {
         currentPhasingData = data;
         renderPhasing(data);
     } catch (err) {
-        console.error("Failed to load graph coloring schedule:", err);
+        currentPhasingData = DEFAULT_PHASING_DATA;
+        renderPhasing(DEFAULT_PHASING_DATA);
+        return;
         const container = getElement("phasingMetrics");
         if (container) {
             container.innerHTML = `
