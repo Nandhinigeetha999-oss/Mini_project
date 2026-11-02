@@ -1041,9 +1041,10 @@ function renderReports() {
                 `;
             }
 
-            const teamBadge = report.assignedTeam && report.assignedTeam !== "Unassigned"
-                ? `<span class="status status-active">Team ${escapeHTML(report.assignedTeam)}</span>`
-                : `<span class="status status-pending">Queued</span>`;
+            const isUnassigned = !report.assignedTeam || report.assignedTeam.toLowerCase().includes("unassigned");
+            const teamBadge = isUnassigned
+                ? `<span class="status status-pending">Unassigned (Queued)</span>`
+                : `<span class="status status-active">Team ${escapeHTML(report.assignedTeam.replace(/^Team\s+/i, ""))}</span>`;
             const toolsDisplay = report.assignedEquipment
                 ? `<span style="font-size: 0.85em; color: #334155;">${escapeHTML(report.assignedEquipment)}</span>`
                 : `<span style="font-size: 0.85em; color: #94a3b8;">—</span>`;

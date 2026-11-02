@@ -5,6 +5,10 @@ import db.DatabaseManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.PriorityQueue;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
 import model.MaintenanceTeam;
 import model.PotholeRepair;
 import model.RepairJob;
@@ -46,6 +50,83 @@ public class RepairManager {
      * Automatically fetches details, selects the closest available maintenance team via Dijkstra,
      * equips them with the necessary tools, and allots the job.
      */
+    public static boolean isTeamReallyAvailable(MaintenanceTeam team) {
+        if (team == null || !team.available) {
+            return false;
+        }
+        String tid = team.teamId.trim().toUpperCase(Locale.ROOT);
+        for (RoadDamage r : Main.reports) {
+            if ("ACTIVE".equalsIgnoreCase(r.status) && r.assignedTeam != null && tid.equalsIgnoreCase(r.assignedTeam.trim())) {
+                return false;
+            }
+        }
+        for (RepairJob job : Main.repairJobs) {
+            if ("ACTIVE".equalsIgnoreCase(job.status) && job.assignedTeam != null && tid.equalsIgnoreCase(job.assignedTeam.teamId.trim())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static synchronized void reconcileTeamAssignments() {
+        ensureTeamsInitialized();
+
+        Set<String> activeAllottedTeams = new HashSet<>();
+        List<RoadDamage> duplicateReports = new ArrayList<>();
+
+        for (RoadDamage report : Main.reports) {
+            if ("ACTIVE".equalsIgnoreCase(report.status) && report.assignedTeam != null && !report.assignedTeam.toLowerCase().contains("unassigned")) {
+                String tid = report.assignedTeam.trim().toUpperCase(Locale.ROOT);
+                if (activeAllottedTeams.contains(tid)) {
+                    duplicateReports.add(report);
+                } else {
+                    activeAllottedTeams.add(tid);
+                }
+            }
+        }
+
+        for (RoadDamage dup : duplicateReports) {
+            dup.status = "PENDING";
+            dup.assignedTeam = "Unassigned (Queued)";
+            try {
+                DatabaseManager.updateDamageReportAssignment(dup.reportId, "Unassigned (Queued)", dup.assignedEquipment, "PENDING");
+            } catch (SQLException ignored) { }
+        }
+
+        for (MaintenanceTeam team : Main.teams) {
+            String tid = team.teamId.trim().toUpperCase(Locale.ROOT);
+            boolean isAssigned = activeAllottedTeams.contains(tid);
+            team.available = !isAssigned;
+            try {
+                DatabaseManager.saveOrUpdateMaintenanceTeam(team);
+            } catch (SQLException ignored) { }
+        }
+
+        Main.repairJobs.clear();
+        for (RoadDamage report : Main.reports) {
+            if ("ACTIVE".equalsIgnoreCase(report.status) && report.assignedTeam != null && !report.assignedTeam.toLowerCase().contains("unassigned")) {
+                MaintenanceTeam team = Main.teamMap.get(report.assignedTeam.trim().toUpperCase(Locale.ROOT));
+                if (team != null) {
+                    RepairJob job;
+                    if (report.damageType.equalsIgnoreCase("Pothole")) {
+                        job = new PotholeRepair(report);
+                    } else if (report.damageType.equalsIgnoreCase("Resurfacing")) {
+                        job = new ResurfacingRepair(report);
+                    } else if (report.damageType.equalsIgnoreCase("Road Crack")) {
+                        job = new RoadCrackRepair(report);
+                    } else {
+                        job = new RepairJob(report);
+                    }
+                    job.assignTeam(team);
+                    job.requiredEquipment = report.assignedEquipment;
+                    Main.repairJobs.add(job);
+                }
+            }
+        }
+
+        autoAllotAllPendingRepairs();
+    }
+
     public static synchronized RepairJob autoAllotTeamAndTools(RoadDamage report) {
         if (report == null) {
             return null;
@@ -59,7 +140,7 @@ public class RepairManager {
 
         // Find the best available team using shortest Dijkstra travel time
         for (MaintenanceTeam team : Main.teams) {
-            if (!team.available) {
+            if (!isTeamReallyAvailable(team)) {
                 continue;
             }
 
@@ -198,7 +279,7 @@ public class RepairManager {
         int shortestTime = Integer.MAX_VALUE;
 
         for (MaintenanceTeam team : Main.teams) {
-            if (team.available) {
+            if (isTeamReallyAvailable(team)) {
                 int travelTime = calculateTravelTime(team.currentLocation, report);
                 if (travelTime >= 0 && travelTime < shortestTime) {
                     shortestTime = travelTime;

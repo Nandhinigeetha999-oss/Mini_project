@@ -129,7 +129,7 @@ public final class RoadApiServer {
             }
 
             if ("POST".equalsIgnoreCase(method) && "/api/teams/auto-allot".equals(path)) {
-                RepairManager.autoAllotAllPendingRepairs();
+                RepairManager.reconcileTeamAssignments();
                 sendTeams(exchange);
                 return;
             }

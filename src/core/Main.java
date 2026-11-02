@@ -60,18 +60,8 @@ public class Main {
             initializeDefaultTeams();
         }
 
-        // Reconstruct active repair jobs from persisted active reports
-        for (RoadDamage report : reports) {
-            if ("ACTIVE".equalsIgnoreCase(report.status) && report.assignedTeam != null && !"Unassigned".equalsIgnoreCase(report.assignedTeam)) {
-                MaintenanceTeam team = teamMap.get(report.assignedTeam);
-                if (team != null) {
-                    RepairJob job = new RepairJob(report);
-                    job.assignTeam(team);
-                    job.requiredEquipment = report.assignedEquipment;
-                    repairJobs.add(job);
-                }
-            }
-        }
+        // Reconcile and reconstruct active repair jobs without duplicate team assignments
+        RepairManager.reconcileTeamAssignments();
     }
 
     public static void initializeDefaultTeams() {
