@@ -50,18 +50,25 @@ public class RepairManager {
      * Automatically fetches details, selects the closest available maintenance team via Dijkstra,
      * equips them with the necessary tools, and allots the job.
      */
+    public static class AllotmentSummary {
+        public int allottedCount = 0;
+        public int pendingCount = 0;
+        public List<String> allottedDetails = new ArrayList<>();
+        public String message = "";
+    }
+
     public static boolean isTeamReallyAvailable(MaintenanceTeam team) {
         if (team == null || !team.available) {
             return false;
         }
         String tid = team.teamId.trim().toUpperCase(Locale.ROOT);
         for (RoadDamage r : Main.reports) {
-            if ("ACTIVE".equalsIgnoreCase(r.status) && r.assignedTeam != null && tid.equalsIgnoreCase(r.assignedTeam.trim())) {
+            if ("ACTIVE".equalsIgnoreCase(r.status) && r.assignedTeam != null && tid.equalsIgnoreCase(r.assignedTeam.trim().replaceAll("(?i)^Team\\s*", ""))) {
                 return false;
             }
         }
         for (RepairJob job : Main.repairJobs) {
-            if ("ACTIVE".equalsIgnoreCase(job.status) && job.assignedTeam != null && tid.equalsIgnoreCase(job.assignedTeam.teamId.trim())) {
+            if ("ACTIVE".equalsIgnoreCase(job.status) && job.assignedTeam != null && tid.equalsIgnoreCase(job.assignedTeam.teamId.trim().replaceAll("(?i)^Team\\s*", ""))) {
                 return false;
             }
         }
@@ -69,6 +76,29 @@ public class RepairManager {
     }
 
     public static synchronized void reconcileTeamAssignments() {
+        reconcileAndAutoAllot();
+    }
+
+    public static synchronized AllotmentSummary reconcileAndAutoAllot() {
+        try {
+            ArrayList<RoadDamage> dbReports = DatabaseManager.loadDamageReports();
+            Main.reports.clear();
+            Main.reportMap.clear();
+            for (RoadDamage r : dbReports) {
+                Main.reports.add(r);
+                Main.reportMap.put(r.reportId, r);
+            }
+            ArrayList<MaintenanceTeam> dbTeams = DatabaseManager.loadMaintenanceTeams();
+            if (!dbTeams.isEmpty()) {
+                Main.teams.clear();
+                Main.teamMap.clear();
+                for (MaintenanceTeam t : dbTeams) {
+                    Main.teams.add(t);
+                    Main.teamMap.put(t.teamId.trim().toUpperCase(Locale.ROOT), t);
+                }
+            }
+        } catch (SQLException ignored) { }
+
         ensureTeamsInitialized();
 
         Set<String> activeAllottedTeams = new HashSet<>();
@@ -76,7 +106,7 @@ public class RepairManager {
 
         for (RoadDamage report : Main.reports) {
             if ("ACTIVE".equalsIgnoreCase(report.status) && report.assignedTeam != null && !report.assignedTeam.toLowerCase().contains("unassigned")) {
-                String tid = report.assignedTeam.trim().toUpperCase(Locale.ROOT);
+                String tid = report.assignedTeam.trim().replaceAll("(?i)^Team\\s*", "").toUpperCase(Locale.ROOT);
                 if (activeAllottedTeams.contains(tid)) {
                     duplicateReports.add(report);
                 } else {
@@ -105,7 +135,8 @@ public class RepairManager {
         Main.repairJobs.clear();
         for (RoadDamage report : Main.reports) {
             if ("ACTIVE".equalsIgnoreCase(report.status) && report.assignedTeam != null && !report.assignedTeam.toLowerCase().contains("unassigned")) {
-                MaintenanceTeam team = Main.teamMap.get(report.assignedTeam.trim().toUpperCase(Locale.ROOT));
+                String tid = report.assignedTeam.trim().replaceAll("(?i)^Team\\s*", "").toUpperCase(Locale.ROOT);
+                MaintenanceTeam team = Main.teamMap.get(tid);
                 if (team != null) {
                     RepairJob job;
                     if (report.damageType.equalsIgnoreCase("Pothole")) {
@@ -124,7 +155,44 @@ public class RepairManager {
             }
         }
 
-        autoAllotAllPendingRepairs();
+        AllotmentSummary summary = new AllotmentSummary();
+        PriorityQueue<RoadDamage> queue = new PriorityQueue<>(RepairPriorityPolicy.priorityComparator);
+
+        for (RoadDamage report : Main.reports) {
+            if (!"COMPLETED".equalsIgnoreCase(report.status)) {
+                boolean isUnassigned = report.assignedTeam == null
+                        || report.assignedTeam.trim().isEmpty()
+                        || report.assignedTeam.toLowerCase().contains("unassigned")
+                        || "PENDING".equalsIgnoreCase(report.status);
+                if (isUnassigned) {
+                    queue.add(report);
+                }
+            }
+        }
+
+        summary.pendingCount = queue.size();
+
+        if (queue.isEmpty()) {
+            summary.message = "No pending repairs waiting for allotment. All tasks are active or completed.";
+            return summary;
+        }
+
+        while (!queue.isEmpty()) {
+            RoadDamage report = queue.poll();
+            RepairJob job = autoAllotTeamAndTools(report);
+            if (job != null && job.assignedTeam != null) {
+                summary.allottedCount++;
+                summary.allottedDetails.add("Team " + job.assignedTeam.teamId + " -> " + report.reportId + " (" + report.damageType + ")");
+            }
+        }
+
+        if (summary.allottedCount > 0) {
+            summary.message = "Auto-allotted " + summary.allottedCount + " team(s): " + String.join(", ", summary.allottedDetails);
+        } else {
+            summary.message = "All maintenance teams are currently busy. " + summary.pendingCount + " pending repair(s) queued for next available team.";
+        }
+
+        return summary;
     }
 
     public static synchronized RepairJob autoAllotTeamAndTools(RoadDamage report) {

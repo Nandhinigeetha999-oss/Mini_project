@@ -129,8 +129,8 @@ public final class RoadApiServer {
             }
 
             if ("POST".equalsIgnoreCase(method) && "/api/teams/auto-allot".equals(path)) {
-                RepairManager.reconcileTeamAssignments();
-                sendTeams(exchange);
+                RepairManager.AllotmentSummary summary = RepairManager.reconcileAndAutoAllot();
+                sendAutoAllotResponse(exchange, summary);
                 return;
             }
 
@@ -470,8 +470,8 @@ public final class RoadApiServer {
                 .append("\"}");
     }
 
-    private static void sendTeams(HttpExchange exchange) throws IOException {
-        StringBuilder json = new StringBuilder("[");
+    private static void appendTeamsJson(StringBuilder json) {
+        json.append('[');
         int index = 0;
         for (MaintenanceTeam team : Main.teams) {
             if (index > 0) json.append(',');
@@ -509,6 +509,23 @@ public final class RoadApiServer {
             index++;
         }
         json.append(']');
+    }
+
+    private static void sendTeams(HttpExchange exchange) throws IOException {
+        StringBuilder json = new StringBuilder();
+        appendTeamsJson(json);
+        sendJson(exchange, 200, json.toString());
+    }
+
+    private static void sendAutoAllotResponse(HttpExchange exchange, RepairManager.AllotmentSummary summary) throws IOException {
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"success\":true,");
+        json.append("\"allottedCount\":").append(summary.allottedCount).append(",");
+        json.append("\"pendingCount\":").append(summary.pendingCount).append(",");
+        json.append("\"message\":\"").append(jsonEscape(summary.message)).append("\",");
+        json.append("\"teams\":");
+        appendTeamsJson(json);
+        json.append("}");
         sendJson(exchange, 200, json.toString());
     }
 

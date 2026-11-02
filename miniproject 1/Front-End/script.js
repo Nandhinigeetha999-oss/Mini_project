@@ -266,9 +266,11 @@ async function fetchTeamsFromApi() {
                         id: team.id,
                         location: team.location,
                         available: Boolean(team.available),
+                        activeJob: team.activeJob || "",
                         equipment: Array.isArray(team.equipment) ? team.equipment : []
                     };
                 });
+                saveTeams();
                 renderTeams();
                 renderJobs();
             }
@@ -296,15 +298,68 @@ async function triggerAutoAllot() {
         await fetchTeamsFromApi();
         await loadReports();
         if (message) {
-            message.textContent = "Auto-allotment completed! Teams and tools assigned.";
-            message.classList.remove("error");
+            message.textContent = payload.message || "Auto-allotment completed! Teams and tools assigned.";
+            if (payload.allottedCount === 0 && payload.pendingCount > 0) {
+                message.classList.add("error");
+            } else {
+                message.classList.remove("error");
+            }
         }
         renderEverything();
     } catch (error) {
-        if (message) {
-            message.textContent = `Auto-allotment failed: ${error.message}`;
-            message.classList.add("error");
+        // Client-side / Demo Mode Fallback:
+        const pendingReports = reports.filter(function (r) {
+            return r.status !== "Completed" && 
+                (r.status === "Pending" || !r.assignedTeam || r.assignedTeam.toLowerCase().includes("unassigned"));
+        });
+
+        if (pendingReports.length === 0) {
+            if (message) {
+                message.textContent = "No pending repairs waiting for allotment. All tasks are active or completed.";
+                message.classList.remove("error");
+            }
+            return;
         }
+
+        const availableTeams = teams.filter(function (t) {
+            return t.available && (!t.activeJob || t.activeJob === "");
+        });
+
+        if (availableTeams.length === 0) {
+            if (message) {
+                message.textContent = `All maintenance teams are currently busy. ${pendingReports.length} pending repair(s) queued for next available team.`;
+                message.classList.add("error");
+            }
+            return;
+        }
+
+        let allottedCount = 0;
+        const details = [];
+        for (const rep of pendingReports) {
+            const team = availableTeams.shift();
+            if (!team) break;
+
+            rep.assignedTeam = team.id;
+            rep.status = "Active";
+            const reqTool = rep.damage && rep.damage.toLowerCase().includes("crack") ? "Road Cutter"
+                : rep.damage && rep.damage.toLowerCase().includes("resurfacing") ? "Resurfacing Machine"
+                : "Pothole Kit";
+            rep.assignedEquipment = reqTool;
+            if (!team.equipment.includes(reqTool)) {
+                team.equipment.push(reqTool);
+            }
+            team.available = false;
+            team.activeJob = "J-" + rep.id;
+            allottedCount++;
+            details.push(`Team ${team.id} -> ${rep.id} (${rep.damage})`);
+        }
+
+        saveTeams();
+        if (message) {
+            message.textContent = `[Demo Mode] Auto-allotted ${allottedCount} team(s): ${details.join(", ")}`;
+            message.classList.remove("error");
+        }
+        renderEverything();
     }
 }
 
@@ -1340,7 +1395,11 @@ function renderTeams() {
                     ${escapeHTML(team.location)}
                 </p>
                 ${(function() {
-                    const assignedReport = reports.find(r => r.assignedTeam === team.id && r.status !== "Completed");
+                    const assignedReport = reports.find(function (r) {
+                        if (!r || !r.assignedTeam || r.status === "Completed") return false;
+                        const cleanTeam = r.assignedTeam.trim().replace(/^Team\s+/i, "").toUpperCase();
+                        return cleanTeam === team.id.toUpperCase();
+                    });
                     const activeJobText = team.activeJob || (assignedReport ? ("J-" + assignedReport.id) : "");
                     return activeJobText
                         ? '<p class="team-assignment" style="margin:6px 0 10px; font-size:13px;"><strong>Active Job:</strong> <span class="badge blue" style="background:#eff6ff; color:#1d4ed8; padding:3px 8px; border-radius:4px; font-weight:700;">' + escapeHTML(activeJobText) + '</span></p>'
@@ -1444,9 +1503,16 @@ getElement("teamRegistrationForm").addEventListener("submit", async function (ev
         await fetchTeamsFromApi();
         await loadReports();
 
-        const createdTeam = teams.find(t => t.id === teamId);
-        const assignedInfo = (createdTeam && createdTeam.activeJob)
-            ? ` Auto-allotted to Repair ${createdTeam.activeJob}!`
+        const createdTeam = teams.find(function (t) { return t.id.toUpperCase() === teamId.toUpperCase(); });
+        const activeJob = (createdTeam && createdTeam.activeJob) || (function () {
+            const rep = reports.find(function (r) {
+                if (!r || !r.assignedTeam || r.status === "Completed") return false;
+                return r.assignedTeam.trim().replace(/^Team\s+/i, "").toUpperCase() === teamId.toUpperCase();
+            });
+            return rep ? ("J-" + rep.id) : "";
+        })();
+        const assignedInfo = activeJob
+            ? ` Auto-allotted to Repair ${activeJob}!`
             : (available ? " Ready for dispatch." : " Marked unavailable.");
 
         message.textContent = `Team ${teamId} registered and saved in database.${assignedInfo}`;
