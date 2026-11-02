@@ -244,8 +244,14 @@ public class RepairManager {
                 new PriorityQueue<>(RepairPriorityPolicy.priorityComparator);
 
         for (RoadDamage report : Main.reports) {
-            if ("PENDING".equalsIgnoreCase(report.status) || "Unassigned".equalsIgnoreCase(report.assignedTeam)) {
-                queue.add(report);
+            if (!"COMPLETED".equalsIgnoreCase(report.status)) {
+                boolean isUnassigned = report.assignedTeam == null
+                        || report.assignedTeam.trim().isEmpty()
+                        || report.assignedTeam.toLowerCase().contains("unassigned")
+                        || "PENDING".equalsIgnoreCase(report.status);
+                if (isUnassigned) {
+                    queue.add(report);
+                }
             }
         }
 
@@ -294,6 +300,28 @@ public class RepairManager {
     private static int calculateTravelTime(String fromLocation, RoadDamage report) {
         if (fromLocation == null || report == null) {
             return -1;
+        }
+
+        fromLocation = fromLocation.trim();
+        if (report.location != null && fromLocation.equalsIgnoreCase(report.location.trim())) {
+            return 0;
+        }
+        if (report.startLocation != null && fromLocation.equalsIgnoreCase(report.startLocation.trim())) {
+            return 0;
+        }
+        if (report.endLocation != null && fromLocation.equalsIgnoreCase(report.endLocation.trim())) {
+            return 0;
+        }
+
+        if (fromLocation.contains(" - ")) {
+            String[] parts = fromLocation.split(" - ", 2);
+            String p1 = parts[0].trim();
+            String p2 = parts[1].trim();
+            int t1 = Dijkstra.findShortestDistance(Main.roadNetwork, p1, report.startLocation);
+            int t2 = Dijkstra.findShortestDistance(Main.roadNetwork, p2, report.startLocation);
+            if (t1 >= 0 && t2 >= 0) return Math.min(t1, t2);
+            if (t1 >= 0) return t1;
+            if (t2 >= 0) return t2;
         }
 
         int travelTime = Dijkstra.findShortestDistance(Main.roadNetwork, fromLocation, report.startLocation);

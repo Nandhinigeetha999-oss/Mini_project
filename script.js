@@ -1213,15 +1213,89 @@ getElement("reportForm").addEventListener("submit", async function (event) {
    MAINTENANCE TEAMS
 ---------------------------------- */
 
-function renderTeams() {
-    const previousLocation = getElement("newTeamLocation").value;
-    const locationOptions = Object.keys(locations).map(function (location) {
-        return `<option value="${escapeHTML(location)}">${escapeHTML(location)}</option>`;
-    }).join("");
+function getPendingReports() {
+    return reports.filter(function (r) {
+        if (!r) return false;
+        const status = (r.status || "").toLowerCase();
+        const team = (r.assignedTeam || "").toLowerCase();
+        if (status === "completed") return false;
+        return status === "pending" || !r.assignedTeam || team.includes("unassigned") || team === "";
+    });
+}
 
-    getElement("newTeamLocation").innerHTML = locationOptions;
-    if (Object.keys(locations).includes(previousLocation)) {
-        getElement("newTeamLocation").value = previousLocation;
+function renderTeams() {
+    const newTeamLocationSelect = getElement("newTeamLocation");
+    const previousLocation = newTeamLocationSelect.value;
+    const registerButton = getElement("teamRegistrationForm")?.querySelector("button[type='submit']");
+    const pendingReports = getPendingReports();
+
+    if (pendingReports.length === 0) {
+        newTeamLocationSelect.innerHTML = '<option value="" disabled selected>No road damage is found</option>';
+        newTeamLocationSelect.disabled = true;
+        if (registerButton) {
+            registerButton.disabled = true;
+            registerButton.title = "No road damage is found";
+        }
+    } else {
+        newTeamLocationSelect.disabled = false;
+        if (registerButton) {
+            registerButton.disabled = false;
+            registerButton.title = "";
+        }
+
+        const pendingOptions = [];
+        const seenValues = new Set();
+
+        pendingReports.forEach(function (r) {
+            const road = Array.isArray(roads) ? roads.find(function (rd) { return rd.id === r.roadId; }) : null;
+            const fromLoc = r.from || (road ? road.from : "");
+            const toLoc = r.to || (road ? road.to : "");
+            const loc = r.location || (fromLoc && toLoc ? `${fromLoc} - ${toLoc}` : fromLoc || toLoc);
+
+            const candidates = [];
+            if (loc) {
+                candidates.push({
+                    value: loc,
+                    label: `${loc} — [Pending: ${r.id} (${r.damage || "Damage"})]`
+                });
+            }
+            if (fromLoc && fromLoc !== loc) {
+                candidates.push({
+                    value: fromLoc,
+                    label: `${fromLoc} — [Pending: ${r.id} (${r.damage || "Damage"})]`
+                });
+            }
+            if (toLoc && toLoc !== loc && toLoc !== fromLoc) {
+                candidates.push({
+                    value: toLoc,
+                    label: `${toLoc} — [Pending: ${r.id} (${r.damage || "Damage"})]`
+                });
+            }
+
+            candidates.forEach(function (c) {
+                if (c.value && !seenValues.has(c.value)) {
+                    seenValues.add(c.value);
+                    pendingOptions.push(c);
+                }
+            });
+        });
+
+        if (pendingOptions.length === 0) {
+            newTeamLocationSelect.innerHTML = '<option value="" disabled selected>No road damage is found</option>';
+            newTeamLocationSelect.disabled = true;
+            if (registerButton) {
+                registerButton.disabled = true;
+                registerButton.title = "No road damage is found";
+            }
+        } else {
+            newTeamLocationSelect.innerHTML = pendingOptions.map(function (opt) {
+                return `<option value="${escapeHTML(opt.value)}">${escapeHTML(opt.label)}</option>`;
+            }).join("");
+
+            if (seenValues.has(previousLocation)) {
+                newTeamLocationSelect.value = previousLocation;
+            }
+        }
     }
 
     const equipmentTeam = getElement("equipmentTeam");
@@ -1322,10 +1396,24 @@ getElement("teamRegistrationForm").addEventListener("submit", async function (ev
         return;
     }
 
+    const pendingReports = getPendingReports();
+    const message = getElement("teamFormMessage");
+
+    if (pendingReports.length === 0) {
+        message.textContent = "No road damage is found.";
+        message.classList.add("error");
+        return;
+    }
+
     const teamId = getElement("newTeamId").value.trim().toUpperCase();
     const location = getElement("newTeamLocation").value;
     const available = getElement("newTeamAvailability").value === "true";
-    const message = getElement("teamFormMessage");
+
+    if (!location) {
+        message.textContent = "No road damage is found.";
+        message.classList.add("error");
+        return;
+    }
 
     if (teams.some(team => team.id.toUpperCase() === teamId)) {
         message.textContent = `Team ${teamId} is already registered.`;
@@ -1683,6 +1771,9 @@ function mapReport(report) {
     return {
         id: report.id,
         roadId: report.roadId,
+        location: report.location || report.from || "",
+        from: report.from || "",
+        to: report.to || "",
         damage: report.damage,
         severity: report.severity,
         risk: report.risk,
