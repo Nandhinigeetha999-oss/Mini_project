@@ -214,18 +214,15 @@ public final class RoadApiServer {
             throws IOException, SQLException {
         String reportId = URLDecoder.decode(encodedReportId, "UTF-8");
         String status = queryValue(exchange.getRequestURI().getRawQuery(), "status");
-        if (!DatabaseManager.updateDamageReportStatus(reportId, status)) {
-            sendJson(exchange, 404, "{\"error\":\"Report not found.\"}");
+        if (status == null || status.isBlank()) {
+            sendJson(exchange, 400, "{\"error\":\"Status query parameter is required.\"}");
             return;
         }
 
-        if (status != null && status.equalsIgnoreCase("COMPLETED")) {
-            RepairManager.completeRepair(reportId);
-        }
+        RepairManager.updateJobStatus(reportId, status);
 
         RoadDamage report = Main.reportMap.get(reportId);
         if (report != null) {
-            report.status = status.toUpperCase(Locale.ROOT);
             sendReport(exchange, 200, report);
             return;
         }
@@ -237,8 +234,8 @@ public final class RoadApiServer {
             }
         }
         sendJson(exchange, 404, "{\"error\":\"Report not found.\"}");
-    }
-
+    }
+
     private static void createRoad(HttpExchange exchange) throws IOException, SQLException {
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         String roadId = queryValue(body, "id");
