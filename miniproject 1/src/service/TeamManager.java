@@ -34,6 +34,12 @@ public class TeamManager {
 
         Main.teams.add(team);
         Main.teamMap.put(teamId, team);
+        try {
+            db.DatabaseManager.saveOrUpdateMaintenanceTeam(team);
+        } catch (Exception ignored) { }
+
+        // Automatically allot pending repairs to the newly registered team if available
+        RepairManager.autoAllotAllPendingRepairs();
 
         System.out.println("\nMaintenance team registered successfully.");
         System.out.println("Team ID      : " + teamId);
@@ -62,6 +68,9 @@ public class TeamManager {
         String equipmentName = Main.sc.nextLine();
 
         selectedTeam.addEquipment(equipmentName);
+        try {
+            db.DatabaseManager.saveOrUpdateMaintenanceTeam(selectedTeam);
+        } catch (Exception ignored) { }
 
         System.out.println("\nEquipment added successfully.");
         System.out.println("Team ID    : " + teamId);
@@ -91,6 +100,9 @@ public class TeamManager {
         String equipmentName = Main.sc.nextLine();
 
         selectedTeam.removeEquipment(equipmentName);
+        try {
+            db.DatabaseManager.saveOrUpdateMaintenanceTeam(selectedTeam);
+        } catch (Exception ignored) { }
     }
 
     public static void removeEquipment() {
@@ -111,6 +123,9 @@ public class TeamManager {
         boolean removed = team.removeEquipment(equipmentName);
 
         if (removed) {
+            try {
+                db.DatabaseManager.saveOrUpdateMaintenanceTeam(team);
+            } catch (Exception ignored) { }
             System.out.println(equipmentName + " removed from Team " + teamId + ".");
         } else {
             System.out.println(equipmentName + " is not assigned to Team " + teamId + ".");

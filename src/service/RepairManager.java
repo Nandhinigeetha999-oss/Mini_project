@@ -133,11 +133,18 @@ public class RepairManager {
      * Automatically processes and allots all pending damage reports to available teams.
      */
     public static synchronized void autoAllotAllPendingRepairs() {
+        ensureTeamsInitialized();
         PriorityQueue<RoadDamage> queue = new PriorityQueue<>(RepairPriorityPolicy.priorityComparator);
 
         for (RoadDamage report : Main.reports) {
-            if ("PENDING".equalsIgnoreCase(report.status) || "Unassigned".equalsIgnoreCase(report.assignedTeam)) {
-                queue.add(report);
+            if (!"COMPLETED".equalsIgnoreCase(report.status)) {
+                boolean isUnassigned = report.assignedTeam == null
+                        || report.assignedTeam.trim().isEmpty()
+                        || report.assignedTeam.toLowerCase().contains("unassigned")
+                        || "PENDING".equalsIgnoreCase(report.status);
+                if (isUnassigned) {
+                    queue.add(report);
+                }
             }
         }
 

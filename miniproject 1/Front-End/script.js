@@ -1264,6 +1264,13 @@ function renderTeams() {
                     <strong>Current location:</strong><br>
                     ${escapeHTML(team.location)}
                 </p>
+                ${(function() {
+                    const assignedReport = reports.find(r => r.assignedTeam === team.id && r.status !== "Completed");
+                    const activeJobText = team.activeJob || (assignedReport ? ("J-" + assignedReport.id) : "");
+                    return activeJobText
+                        ? '<p class="team-assignment" style="margin:6px 0 10px; font-size:13px;"><strong>Active Job:</strong> <span class="badge blue" style="background:#eff6ff; color:#1d4ed8; padding:3px 8px; border-radius:4px; font-weight:700;">' + escapeHTML(activeJobText) + '</span></p>'
+                        : '<p class="team-assignment text-muted" style="margin:6px 0 10px; font-size:13px; color:#64748b;"><small>No active job (Ready for dispatch)</small></p>';
+                })()}
                 <strong class="equipment-heading">Equipment</strong>
                 <ul class="equipment-list">${equipmentHTML}</ul>
             </article>
@@ -1307,7 +1314,7 @@ getElement("equipmentDamageType").addEventListener("change", function () {
 });
 loadEquipmentOptions(getElement("equipmentDamageType").value);
 
-getElement("teamRegistrationForm").addEventListener("submit", function (event) {
+getElement("teamRegistrationForm").addEventListener("submit", async function (event) {
     event.preventDefault();
 
     if (currentUser?.role !== "engineering") {
@@ -1315,6 +1322,8 @@ getElement("teamRegistrationForm").addEventListener("submit", function (event) {
     }
 
     const teamId = getElement("newTeamId").value.trim().toUpperCase();
+    const location = getElement("newTeamLocation").value;
+    const available = getElement("newTeamAvailability").value === "true";
     const message = getElement("teamFormMessage");
 
     if (teams.some(team => team.id.toUpperCase() === teamId)) {
@@ -1323,20 +1332,65 @@ getElement("teamRegistrationForm").addEventListener("submit", function (event) {
         return;
     }
 
-    teams.push({
-        id: teamId,
-        location: getElement("newTeamLocation").value,
-        available: getElement("newTeamAvailability").value === "true",
-        equipment: []
-    });
-
-    const saved = saveTeams();
-    event.target.reset();
-    message.textContent = saved
-        ? `Team ${teamId} registered.`
-        : `Team ${teamId} registered for this session. Browser storage is unavailable.`;
+    message.textContent = `Registering Team ${teamId}...`;
     message.classList.remove("error");
-    renderEverything();
+
+    try {
+        const response = await fetch(`${API_BASE}/api/teams`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+            body: new URLSearchParams({
+                id: teamId,
+                location: location,
+                available: String(available)
+            })
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+        }
+
+        event.target.reset();
+        await fetchTeamsFromApi();
+        await loadReports();
+
+        const createdTeam = teams.find(t => t.id === teamId);
+        const assignedInfo = (createdTeam && createdTeam.activeJob)
+            ? ` Auto-allotted to Repair ${createdTeam.activeJob}!`
+            : (available ? " Ready for dispatch." : " Marked unavailable.");
+
+        message.textContent = `Team ${teamId} registered and saved in database.${assignedInfo}`;
+        message.classList.remove("error");
+        renderEverything();
+    } catch (error) {
+        const newTeamObj = {
+            id: teamId,
+            location: location,
+            available: available,
+            equipment: [],
+            activeJob: ""
+        };
+        teams.push(newTeamObj);
+        event.target.reset();
+
+        let allottedNotice = "";
+        if (available) {
+            const pendingRep = reports.find(r => r.status !== "Completed" && (!r.assignedTeam || r.assignedTeam === "Unassigned" || r.assignedTeam.includes("Unassigned")));
+            if (pendingRep) {
+                pendingRep.assignedTeam = teamId;
+                pendingRep.status = "Active";
+                newTeamObj.available = false;
+                newTeamObj.activeJob = "J-" + pendingRep.id;
+                if (!newTeamObj.equipment.includes("Pothole Kit")) newTeamObj.equipment.push("Pothole Kit");
+                allottedNotice = ` Auto-allotted to pending repair J-${pendingRep.id}!`;
+            }
+        }
+        saveTeams();
+        message.textContent = `[Demo Mode] Team ${teamId} registered locally.${allottedNotice}`;
+        message.classList.remove("error");
+        renderEverything();
+    }
 });
 
 getElement("equipmentForm").addEventListener("submit", async function (event) {
@@ -1362,24 +1416,26 @@ getElement("equipmentForm").addEventListener("submit", async function (event) {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/equipment`, {
+        await fetch(`${API_BASE}/api/equipment`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
             body: new URLSearchParams({ damageType, equipmentName })
         });
 
-        const payload = await response.json();
-        if (!response.ok && response.status !== 409) {
-            throw new Error(payload.error || `Equipment API returned HTTP ${response.status}.`);
+        const response = await fetch(`${API_BASE}/api/teams/equipment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+            body: new URLSearchParams({ teamId: team.id, equipmentName: equipmentName })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
 
-        team.equipment.push(equipmentName);
-        const saved = saveTeams();
+        await fetchTeamsFromApi();
         event.target.reset();
         loadEquipmentOptions(damageType);
-        message.textContent = saved
-            ? `${equipmentName} added to team ${team.id}.`
-            : `${equipmentName} added for this session. Browser storage is unavailable.`;
+        message.textContent = `${equipmentName} added to team ${team.id} and saved to database.`;
         message.classList.remove("error");
         renderEverything();
     } catch (error) {
@@ -1388,7 +1444,7 @@ getElement("equipmentForm").addEventListener("submit", async function (event) {
     }
 });
 
-getElement("teamsGrid").addEventListener("click", function (event) {
+getElement("teamsGrid").addEventListener("click", async function (event) {
     const button = event.target.closest("[data-remove-team]");
 
     if (!button || currentUser?.role !== "engineering") {
@@ -1402,13 +1458,33 @@ getElement("teamsGrid").addEventListener("click", function (event) {
         return;
     }
 
-    const [removedEquipment] = team.equipment.splice(equipmentIndex, 1);
-    const saved = saveTeams();
+    const removedEquipment = team.equipment[equipmentIndex];
     const message = getElement("teamFormMessage");
-    message.textContent = saved
-        ? `${removedEquipment} removed from team ${team.id}.`
-        : `${removedEquipment} removed for this session. Browser storage is unavailable.`;
-    message.classList.remove("error");
+
+    try {
+        const response = await fetch(
+            `${API_BASE}/api/teams/equipment?teamId=${encodeURIComponent(team.id)}&equipment=${encodeURIComponent(removedEquipment)}`,
+            { method: "DELETE" }
+        );
+        if (response.ok) {
+            await fetchTeamsFromApi();
+            if (message) {
+                message.textContent = `${removedEquipment} removed from team ${team.id} and updated in database.`;
+                message.classList.remove("error");
+            }
+            renderEverything();
+            return;
+        }
+    } catch (ignored) { }
+
+    team.equipment.splice(equipmentIndex, 1);
+    const saved = saveTeams();
+    if (message) {
+        message.textContent = saved
+            ? `${removedEquipment} removed from team ${team.id}.`
+            : `${removedEquipment} removed for this session. Browser storage is unavailable.`;
+        message.classList.remove("error");
+    }
     renderEverything();
 });
 

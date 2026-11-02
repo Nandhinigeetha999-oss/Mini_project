@@ -123,9 +123,24 @@ public final class RoadApiServer {
                 return;
             }
 
+            if ("POST".equalsIgnoreCase(method) && "/api/teams".equals(path)) {
+                createTeam(exchange);
+                return;
+            }
+
             if ("POST".equalsIgnoreCase(method) && "/api/teams/auto-allot".equals(path)) {
                 RepairManager.autoAllotAllPendingRepairs();
                 sendTeams(exchange);
+                return;
+            }
+
+            if ("POST".equalsIgnoreCase(method) && "/api/teams/equipment".equals(path)) {
+                addTeamEquipment(exchange);
+                return;
+            }
+
+            if ("DELETE".equalsIgnoreCase(method) && "/api/teams/equipment".equals(path)) {
+                removeTeamEquipment(exchange);
                 return;
             }
 
@@ -460,17 +475,6 @@ public final class RoadApiServer {
         int index = 0;
         for (MaintenanceTeam team : Main.teams) {
             if (index > 0) json.append(',');
-            json.append("{\"id\":\"").append(jsonEscape(team.teamId))
-                .append("\",\"location\":\"").append(jsonEscape(team.currentLocation))
-                .append("\",\"available\":").append(team.available)
-                .append(",\"equipment\":[");
-            int eqIndex = 0;
-            for (String eq : team.equipment) {
-                if (eqIndex > 0) json.append(',');
-                json.append('"').append(jsonEscape(eq)).append('"');
-                eqIndex++;
-            }
-            json.append("]");
 
             String activeJobId = "";
             for (RepairJob job : Main.repairJobs) {
@@ -479,7 +483,29 @@ public final class RoadApiServer {
                     break;
                 }
             }
-            json.append(",\"activeJob\":\"").append(jsonEscape(activeJobId)).append("\"}");
+            if (activeJobId.isEmpty()) {
+                for (RoadDamage report : Main.reports) {
+                    if (report.assignedTeam != null && report.assignedTeam.equalsIgnoreCase(team.teamId) && "ACTIVE".equalsIgnoreCase(report.status)) {
+                        activeJobId = "J-" + report.reportId;
+                        break;
+                    }
+                }
+            }
+
+            boolean isAvailable = activeJobId.isEmpty() && team.available;
+
+            json.append("{\"id\":\"").append(jsonEscape(team.teamId))
+                .append("\",\"location\":\"").append(jsonEscape(team.currentLocation))
+                .append("\",\"available\":").append(isAvailable)
+                .append(",\"activeJob\":\"").append(jsonEscape(activeJobId))
+                .append("\",\"equipment\":[");
+            int eqIndex = 0;
+            for (String eq : team.equipment) {
+                if (eqIndex > 0) json.append(',');
+                json.append('"').append(jsonEscape(eq)).append('"');
+                eqIndex++;
+            }
+            json.append("]}");
             index++;
         }
         json.append(']');
@@ -757,6 +783,132 @@ public final class RoadApiServer {
 
         json.append('}');
         sendJson(exchange, 200, json.toString());
+    }
+
+    private static void createTeam(HttpExchange exchange) throws IOException, SQLException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String teamId = queryValue(body, "id");
+        if (teamId == null || teamId.isBlank()) {
+            teamId = queryValue(body, "teamId");
+        }
+        String location = queryValue(body, "location");
+        String availableValue = queryValue(body, "available");
+        String equipment = queryValue(body, "equipment");
+
+        if (teamId == null || teamId.isBlank() || location == null || location.isBlank()) {
+            throw new IllegalArgumentException("Team ID and current location are required.");
+        }
+
+        teamId = teamId.trim().toUpperCase(Locale.ROOT);
+        location = location.trim();
+        boolean available = !"false".equalsIgnoreCase(availableValue);
+
+        if (Main.teamMap.containsKey(teamId)) {
+            sendJson(exchange, 409, "{\"error\":\"Team " + jsonEscape(teamId) + " is already registered.\"}");
+            return;
+        }
+
+        MaintenanceTeam team = new MaintenanceTeam(teamId, location);
+        team.available = available;
+        if (equipment != null && !equipment.isBlank()) {
+            for (String eq : equipment.split(",")) {
+                String trimmed = eq.trim();
+                if (!trimmed.isEmpty()) {
+                    team.addEquipment(trimmed);
+                }
+            }
+        }
+
+        Main.teams.add(team);
+        Main.teamMap.put(teamId, team);
+        DatabaseManager.saveOrUpdateMaintenanceTeam(team);
+
+        // Immediate automated dispatch: If team is available, allot any waiting pending repairs
+        if (team.available) {
+            RepairManager.autoAllotAllPendingRepairs();
+        }
+
+        String activeJob = "";
+        for (RepairJob job : Main.repairJobs) {
+            if (job.assignedTeam != null && job.assignedTeam.teamId.equalsIgnoreCase(team.teamId) && "ACTIVE".equalsIgnoreCase(job.status)) {
+                activeJob = "J-" + job.damage.reportId;
+                break;
+            }
+        }
+        if (activeJob.isEmpty()) {
+            for (RoadDamage report : Main.reports) {
+                if (report.assignedTeam != null && report.assignedTeam.equalsIgnoreCase(team.teamId) && "ACTIVE".equalsIgnoreCase(report.status)) {
+                    activeJob = "J-" + report.reportId;
+                    break;
+                }
+            }
+        }
+
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"id\":\"").append(jsonEscape(team.teamId)).append("\",");
+        json.append("\"location\":\"").append(jsonEscape(team.currentLocation)).append("\",");
+        json.append("\"available\":").append(activeJob.isEmpty() && team.available).append(",");
+        json.append("\"activeJob\":\"").append(jsonEscape(activeJob)).append("\",");
+        json.append("\"equipment\":[");
+        int eqIdx = 0;
+        for (String eq : team.equipment) {
+            if (eqIdx > 0) json.append(',');
+            json.append('"').append(jsonEscape(eq)).append('"');
+            eqIdx++;
+        }
+        json.append("]}");
+
+        sendJson(exchange, 201, json.toString());
+    }
+
+    private static void addTeamEquipment(HttpExchange exchange) throws IOException, SQLException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String teamId = queryValue(body, "teamId");
+        if (teamId == null || teamId.isBlank()) teamId = queryValue(body, "id");
+        String equipmentName = queryValue(body, "equipmentName");
+        if (equipmentName == null || equipmentName.isBlank()) equipmentName = queryValue(body, "equipment");
+
+        if (teamId == null || teamId.isBlank() || equipmentName == null || equipmentName.isBlank()) {
+            throw new IllegalArgumentException("Team ID and equipment name are required.");
+        }
+
+        teamId = teamId.trim().toUpperCase(Locale.ROOT);
+        equipmentName = equipmentName.trim();
+
+        MaintenanceTeam team = Main.teamMap.get(teamId);
+        if (team == null) {
+            sendJson(exchange, 404, "{\"error\":\"Team " + jsonEscape(teamId) + " not found.\"}");
+            return;
+        }
+
+        team.addEquipment(equipmentName);
+        DatabaseManager.saveOrUpdateMaintenanceTeam(team);
+        sendJson(exchange, 200, "{\"success\":true,\"teamId\":\"" + jsonEscape(teamId) + "\",\"equipment\":\"" + jsonEscape(equipmentName) + "\"}");
+    }
+
+    private static void removeTeamEquipment(HttpExchange exchange) throws IOException, SQLException {
+        String query = exchange.getRequestURI().getRawQuery();
+        String teamId = queryValue(query, "teamId");
+        if (teamId == null || teamId.isBlank()) teamId = queryValue(query, "id");
+        String equipmentName = queryValue(query, "equipment");
+        if (equipmentName == null || equipmentName.isBlank()) equipmentName = queryValue(query, "equipmentName");
+
+        if (teamId == null || teamId.isBlank() || equipmentName == null || equipmentName.isBlank()) {
+            throw new IllegalArgumentException("Team ID and equipment name are required.");
+        }
+
+        teamId = teamId.trim().toUpperCase(Locale.ROOT);
+        equipmentName = equipmentName.trim();
+
+        MaintenanceTeam team = Main.teamMap.get(teamId);
+        if (team == null) {
+            sendJson(exchange, 404, "{\"error\":\"Team " + jsonEscape(teamId) + " not found.\"}");
+            return;
+        }
+
+        team.removeEquipment(equipmentName);
+        DatabaseManager.saveOrUpdateMaintenanceTeam(team);
+        sendJson(exchange, 200, "{\"success\":true,\"teamId\":\"" + jsonEscape(teamId) + "\",\"equipment\":\"" + jsonEscape(equipmentName) + "\"}");
     }
 
     private static void handleStatic(HttpExchange exchange) throws IOException {
