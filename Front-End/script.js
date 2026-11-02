@@ -1650,58 +1650,96 @@ getElement("teamsGrid").addEventListener("click", async function (event) {
 function renderJobs() {
     const userRole = currentUser?.role;
     const userTeam = currentUser?.initials || "T1";
+    const cleanUserTeam = (userTeam || "T1").trim().replace(/^Team\s+/i, "").toUpperCase();
+
     const assignedReports = reports.filter(function (report) {
+        if (!report) return false;
         if (userRole === "engineering") {
-            return report.assignedTeam && report.assignedTeam !== "Unassigned";
+            return true;
         }
-        return report.assignedTeam === userTeam || (!report.assignedTeam && userTeam === "T1");
+        const cleanAssigned = (report.assignedTeam || "").trim().replace(/^Team\s+/i, "").toUpperCase();
+        return cleanAssigned === cleanUserTeam || (!report.assignedTeam && cleanUserTeam === "T1");
     });
+
+    const jobsSubtitle = getElement("jobsSubtitle");
+    if (jobsSubtitle) {
+        jobsSubtitle.textContent = userRole === "engineering"
+            ? "Monitor and update repair jobs (Pending, Active, Completed)"
+            : `Jobs assigned to Maintenance Team ${userTeam}`;
+    }
 
     if (assignedReports.length === 0) {
         getElement("jobsTable").innerHTML =
-            `<tr><td colspan="7">No assigned repair jobs.</td></tr>`;
+            `<tr><td colspan="7">No repair jobs currently listed.</td></tr>`;
         return;
     }
 
     getElement("jobsTable").innerHTML = assignedReports.map(function (report) {
-        let action = "—";
+        const isPending = report.status === "Pending";
+        const isActive = report.status === "Active";
+        const isCompleted = report.status === "Completed";
 
-        if (report.status !== "Completed") {
-            action = `
-                <button class="secondary"
-                    data-complete-report="${escapeHTML(report.id)}">
-                    Mark completed
-                </button>
-            `;
-        }
+        const teamLabel = report.assignedTeam && !report.assignedTeam.toLowerCase().includes("unassigned")
+            ? `Team ${report.assignedTeam.replace(/^Team\s+/i, "")}`
+            : "Queued (Unassigned)";
+
+        const action = `
+            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <select class="action-select job-status-select"
+                    data-job-status-id="${escapeHTML(report.id)}"
+                    aria-label="Update status for ${escapeHTML(report.id)}">
+                    <option value="Pending" ${isPending ? "selected" : ""}>Pending</option>
+                    <option value="Active" ${isActive ? "selected" : ""}>Active</option>
+                    <option value="Completed" ${isCompleted ? "selected" : ""}>Completed</option>
+                </select>
+                ${isPending ? `<button class="primary" style="padding: 4px 8px; font-size: 11px;" data-start-report="${escapeHTML(report.id)}" title="Start work on this repair">Start</button>` : ""}
+                ${isActive ? `<button class="secondary" style="padding: 4px 8px; font-size: 11px;" data-complete-report="${escapeHTML(report.id)}" title="Mark repair completed">Complete</button>` : ""}
+            </div>
+        `;
 
         return `
             <tr>
-                <td>J-${escapeHTML(report.id)}</td>
+                <td class="id-text">J-${escapeHTML(report.id)}</td>
                 <td>${escapeHTML(report.id)}</td>
                 <td>${escapeHTML(report.roadId)}</td>
                 <td>${escapeHTML(report.damage)}</td>
-                <td><small style="color: #334155;">${escapeHTML(report.assignedEquipment || 'Standard Kit')}</small></td>
-                <td>${statusBadge(report.status)}</td>
+                <td><small style="color: #334155; font-weight: 500;">${escapeHTML(report.assignedEquipment || 'Standard Kit')}</small></td>
+                <td>${statusBadge(report.status)} <small style="display:block; color:#64748b;">${escapeHTML(teamLabel)}</small></td>
                 <td>${action}</td>
             </tr>
         `;
     }).join("");
 }
 
-getElement("jobsTable").addEventListener("click", function (event) {
-    const button = event.target.closest("[data-complete-report]");
+getElement("jobsTable").addEventListener("change", function (event) {
+    const select = event.target.closest("[data-job-status-id]");
+    if (!select) return;
 
-    if (!button || currentUser?.role !== "team") {
+    const reportId = select.dataset.jobStatusId;
+    const report = reports.find(function (item) { return item.id === reportId; });
+    if (!report) return;
+
+    select.disabled = true;
+    saveReportStatus(report, select.value);
+});
+
+getElement("jobsTable").addEventListener("click", function (event) {
+    const completeBtn = event.target.closest("[data-complete-report]");
+    if (completeBtn) {
+        const report = reports.find(function (item) { return item.id === completeBtn.dataset.completeReport; });
+        if (report) {
+            saveReportStatus(report, "Completed");
+        }
         return;
     }
 
-    const report = reports.find(function (item) {
-        return item.id === button.dataset.completeReport;
-    });
-
-    if (report) {
-        saveReportStatus(report, "Completed");
+    const startBtn = event.target.closest("[data-start-report]");
+    if (startBtn) {
+        const report = reports.find(function (item) { return item.id === startBtn.dataset.startReport; });
+        if (report) {
+            saveReportStatus(report, "Active");
+        }
+        return;
     }
 });
 
@@ -1820,6 +1858,7 @@ function renderEverything() {
     renderRoads();
     renderReports();
     renderTeams();
+    renderJobs();
     populateRouteDropdowns();
 }
 

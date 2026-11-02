@@ -134,25 +134,26 @@ public class RepairManager {
 
         Main.repairJobs.clear();
         for (RoadDamage report : Main.reports) {
-            if ("ACTIVE".equalsIgnoreCase(report.status) && report.assignedTeam != null && !report.assignedTeam.toLowerCase().contains("unassigned")) {
-                String tid = report.assignedTeam.trim().replaceAll("(?i)^Team\\s*", "").toUpperCase(Locale.ROOT);
-                MaintenanceTeam team = Main.teamMap.get(tid);
-                if (team != null) {
-                    RepairJob job;
-                    if (report.damageType.equalsIgnoreCase("Pothole")) {
-                        job = new PotholeRepair(report);
-                    } else if (report.damageType.equalsIgnoreCase("Resurfacing")) {
-                        job = new ResurfacingRepair(report);
-                    } else if (report.damageType.equalsIgnoreCase("Road Crack")) {
-                        job = new RoadCrackRepair(report);
-                    } else {
-                        job = new RepairJob(report);
-                    }
-                    job.assignTeam(team);
-                    job.requiredEquipment = report.assignedEquipment;
-                    Main.repairJobs.add(job);
-                }
+            String tid = (report.assignedTeam != null && !report.assignedTeam.toLowerCase().contains("unassigned"))
+                ? report.assignedTeam.trim().replaceAll("(?i)^Team\\s*", "").toUpperCase(Locale.ROOT)
+                : null;
+            MaintenanceTeam team = tid != null ? Main.teamMap.get(tid) : null;
+            RepairJob job;
+            if (report.damageType.equalsIgnoreCase("Pothole")) {
+                job = new PotholeRepair(report);
+            } else if (report.damageType.equalsIgnoreCase("Resurfacing")) {
+                job = new ResurfacingRepair(report);
+            } else if (report.damageType.equalsIgnoreCase("Road Crack")) {
+                job = new RoadCrackRepair(report);
+            } else {
+                job = new RepairJob(report);
             }
+            if (team != null) {
+                job.assignTeam(team);
+            }
+            job.status = report.status;
+            job.requiredEquipment = report.assignedEquipment;
+            Main.repairJobs.add(job);
         }
 
         AllotmentSummary summary = new AllotmentSummary();
@@ -400,6 +401,64 @@ public class RepairManager {
             travelTime = Dijkstra.findShortestDistance(Main.roadNetwork, fromLocation, report.location);
         }
         return travelTime;
+    }
+
+    public static synchronized void updateJobStatus(String reportId, String status) {
+        if (reportId == null || status == null) return;
+        String normStatus = status.trim().toUpperCase(Locale.ROOT);
+
+        if ("COMPLETED".equals(normStatus)) {
+            completeRepair(reportId);
+            return;
+        }
+
+        RoadDamage targetReport = null;
+        for (RoadDamage r : Main.reports) {
+            if (r.reportId.equalsIgnoreCase(reportId.trim())) {
+                targetReport = r;
+                break;
+            }
+        }
+
+        if (targetReport != null) {
+            targetReport.status = normStatus;
+            if ("PENDING".equals(normStatus)) {
+                targetReport.assignedTeam = "Unassigned (Queued)";
+                try {
+                    DatabaseManager.updateDamageReportAssignment(
+                        targetReport.reportId, "Unassigned (Queued)", targetReport.assignedEquipment, "PENDING");
+                } catch (SQLException ignored) { }
+            } else {
+                try {
+                    DatabaseManager.updateDamageReportStatus(targetReport.reportId, normStatus);
+                } catch (SQLException ignored) { }
+            }
+        } else {
+            try {
+                DatabaseManager.updateDamageReportStatus(reportId, normStatus);
+            } catch (SQLException ignored) { }
+        }
+
+        for (RepairJob job : Main.repairJobs) {
+            if (job.damage.reportId.equalsIgnoreCase(reportId.trim())) {
+                job.status = normStatus;
+                job.damage.status = normStatus;
+                if ("PENDING".equals(normStatus) && job.assignedTeam != null) {
+                    job.assignedTeam.available = true;
+                } else if ("ACTIVE".equals(normStatus) && job.assignedTeam != null) {
+                    job.assignedTeam.available = false;
+                }
+                break;
+            }
+        }
+
+        if ("ACTIVE".equals(normStatus)) {
+            if (targetReport != null && (targetReport.assignedTeam == null || targetReport.assignedTeam.toLowerCase().contains("unassigned"))) {
+                autoAllotTeamAndTools(targetReport);
+            }
+        } else if ("PENDING".equals(normStatus)) {
+            reconcileAndAutoAllot();
+        }
     }
 
     public static synchronized void completeRepair(String reportId) {
